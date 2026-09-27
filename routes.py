@@ -6,6 +6,8 @@ from analysis import (
     comparar_alternativas,
     calcular_cenarios,
     analise_sensibilidade,
+    analisar_viabilidade_investimento,
+    numero,
 )
 from excel_utils import ler_planilha_projeto
 
@@ -26,8 +28,9 @@ def analise_manual():
 def analise_manual_resultado():
     dados = _extrair_dados_formulario(request.form)
     alternativas = _extrair_alternativas_formulario(request.form)
+    investimento = _extrair_investimento_formulario(request.form)
 
-    resultado = _processar(dados, alternativas)
+    resultado = _processar(dados, alternativas, investimento)
     return render_template('resultado.html', **resultado)
 
 
@@ -51,19 +54,19 @@ def importar_planilha_resultado():
         return redirect(url_for('importar_planilha'))
 
     try:
-        dados, alternativas = ler_planilha_projeto(arquivo)
+        dados, alternativas, investimento = ler_planilha_projeto(arquivo)
     except Exception:
         flash('Não foi possível ler a planilha. Confira se ela segue o modelo esperado.')
         return redirect(url_for('importar_planilha'))
 
-    resultado = _processar(dados, alternativas)
+    resultado = _processar(dados, alternativas, investimento)
     return render_template('resultado.html', **resultado)
 
 
 # ---------- Funções auxiliares ----------
 
-def _processar(dados, alternativas):
-    """Roda toda a análise de viabilidade para um conjunto de dados."""
+def _processar(dados, alternativas, investimento=None):
+    """Roda toda a análise de viabilidade (custos + investimento) para um conjunto de dados."""
     projeto = calcular_projeto(dados)
 
     projeto['nome'] = dados.get('nome', 'Projeto proposto')
@@ -76,11 +79,32 @@ def _processar(dados, alternativas):
     sensibilidade = analise_sensibilidade(projeto['custo_total'])
     comparacao = comparar_alternativas(projeto, alternativas)
 
+    investimento = investimento or {}
+
+    investimento_inicial = investimento.get('investimento_inicial')
+    # Se o usuário não informar um investimento inicial próprio, usa o custo
+    # total já calculado do projeto — é ele que está "saindo do bolso".
+    if investimento_inicial in (None, '', 0):
+        investimento_inicial = projeto['custo_total']
+
+    fluxos_caixa = investimento.get('fluxos_caixa', [])
+    taxa_desconto = investimento.get('taxa_desconto', 0)
+    valor_residual = investimento.get('valor_residual', 0)
+
+    analise_investimento = analisar_viabilidade_investimento(
+        investimento_inicial=investimento_inicial,
+        fluxos_caixa=fluxos_caixa,
+        taxa=taxa_desconto,
+        valor_residual=valor_residual,
+    )
+    analise_investimento['fluxos_caixa'] = [numero(f) for f in fluxos_caixa]
+
     return {
         'projeto': projeto,
         'cenarios': cenarios,
         'sensibilidade': sensibilidade,
         'comparacao': comparacao,
+        'investimento': analise_investimento,
     }
 
 
@@ -120,6 +144,19 @@ def _extrair_dados_formulario(form):
         'tempo': form.get('tempo', 0),
         'rendimento': form.get('rendimento', 0),
         'experimentos': experimentos,
+    }
+
+
+def _extrair_investimento_formulario(form):
+    fluxos_caixa = [
+        v for v in form.getlist('fluxo_caixa_valor') if v not in (None, '')
+    ]
+
+    return {
+        'investimento_inicial': form.get('investimento_inicial') or None,
+        'taxa_desconto': form.get('taxa_desconto', 0),
+        'valor_residual': form.get('valor_residual', 0),
+        'fluxos_caixa': fluxos_caixa,
     }
 
 
