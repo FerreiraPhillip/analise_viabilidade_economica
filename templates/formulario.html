@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}Inserção manual - Análise de Viabilidade{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Inserção manual dos dados do projeto</h1>
+
+<form method="post" action="{{ url_for('analise_manual_resultado') }}">
+
+  <div class="card mb-4">
+    <div class="card-header">Dados gerais</div>
+    <div class="card-body row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Nome do projeto</label>
+        <input type="text" class="form-control" name="nome_projeto" value="Projeto proposto">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Tempo (meses)</label>
+        <input type="text" class="form-control" name="tempo">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Rendimento (%)</label>
+        <input type="text" class="form-control" name="rendimento">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Energia (R$)</label>
+        <input type="text" class="form-control" name="energia" value="0">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Mão de obra (R$)</label>
+        <input type="text" class="form-control" name="mao_obra" value="0">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Outros custos (R$)</label>
+        <input type="text" class="form-control" name="outros" value="0">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Quantidade produzida</label>
+        <input type="text" class="form-control" name="quantidade_produzida" value="1">
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      Materiais
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('materiais')">+ material</button>
+    </div>
+    <div class="card-body">
+      <table class="table" id="tabela-materiais">
+        <thead><tr><th>Nome</th><th>Quantidade</th><th>Preço unitário (R$)</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><input type="text" class="form-control" name="material_nome"></td>
+            <td><input type="text" class="form-control" name="material_quantidade"></td>
+            <td><input type="text" class="form-control" name="material_preco"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      Equipamentos
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('equipamentos')">+ equipamento</button>
+    </div>
+    <div class="card-body">
+      <table class="table" id="tabela-equipamentos">
+        <thead><tr><th>Nome</th><th>Horas de uso</th><th>Custo por hora (R$)</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><input type="text" class="form-control" name="equipamento_nome"></td>
+            <td><input type="text" class="form-control" name="equipamento_horas"></td>
+            <td><input type="text" class="form-control" name="equipamento_custo_hora"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      Experimentos (valores repetidos para cálculo estatístico)
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('experimentos')">+ valor</button>
+    </div>
+    <div class="card-body">
+      <table class="table" id="tabela-experimentos">
+        <thead><tr><th>Valor obtido</th></tr></thead>
+        <tbody>
+          <tr><td><input type="text" class="form-control" name="experimento_valor"></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      Alternativas para comparação (opcional)
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('alternativas')">+ alternativa</button>
+    </div>
+    <div class="card-body">
+      <table class="table" id="tabela-alternativas">
+        <thead><tr><th>Nome</th><th>Custo (R$)</th><th>Tempo</th><th>Rendimento (%)</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><input type="text" class="form-control" name="alt_nome"></td>
+            <td><input type="text" class="form-control" name="alt_custo"></td>
+            <td><input type="text" class="form-control" name="alt_tempo"></td>
+            <td><input type="text" class="form-control" name="alt_rendimento"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Calcular viabilidade</button>
+</form>
+
+<script>
+function adicionarLinha(tipo) {
+  const tabelas = {
+    materiais: {id: 'tabela-materiais', campos: ['material_nome', 'material_quantidade', 'material_preco']},
+    equipamentos: {id: 'tabela-equipamentos', campos: ['equipamento_nome', 'equipamento_horas', 'equipamento_custo_hora']},
+    experimentos: {id: 'tabela-experimentos', campos: ['experimento_valor']},
+    alternativas: {id: 'tabela-alternativas', campos: ['alt_nome', 'alt_custo', 'alt_tempo', 'alt_rendimento']},
+  };
+  const config = tabelas[tipo];
+  const tbody = document.querySelector('#' + config.id + ' tbody');
+  const linha = document.createElement('tr');
+  config.campos.forEach(campo => {
+    const td = document.createElement('td');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = campo;
+    input.className = 'form-control';
+    td.appendChild(input);
+    linha.appendChild(td);
+  });
+  tbody.appendChild(linha);
+}
+</script>
+{% endblock %}

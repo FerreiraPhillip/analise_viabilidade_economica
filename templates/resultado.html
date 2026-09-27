@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Resultado - Análise de Viabilidade{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Resultado: {{ projeto.nome }}</h1>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Custo total</h6>
+        <p class="h4">R$ {{ '%.2f'|format(projeto.custo_total) }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Custo unitário</h6>
+        <p class="h4">R$ {{ '%.2f'|format(projeto.custo_unitario) }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-muted">Quantidade produzida</h6>
+        <p class="h4">{{ '%.0f'|format(projeto.quantidade_produzida) }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">Composição de custos</div>
+  <div class="card-body">
+    <table class="table mb-0">
+      <tr><td>Materiais</td><td>R$ {{ '%.2f'|format(projeto.custo_materiais) }}</td></tr>
+      <tr><td>Equipamentos</td><td>R$ {{ '%.2f'|format(projeto.custo_equipamentos) }}</td></tr>
+      <tr><td>Energia</td><td>R$ {{ '%.2f'|format(projeto.energia) }}</td></tr>
+      <tr><td>Mão de obra</td><td>R$ {{ '%.2f'|format(projeto.mao_obra) }}</td></tr>
+      <tr><td>Outros</td><td>R$ {{ '%.2f'|format(projeto.outros) }}</td></tr>
+    </table>
+  </div>
+</div>
+
+{% if projeto.materiais %}
+<div class="card mb-4">
+  <div class="card-header">Detalhamento de materiais</div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Nome</th><th>Quantidade</th><th>Preço unitário</th><th>Custo</th></tr></thead>
+      <tbody>
+        {% for m in projeto.materiais %}
+        <tr>
+          <td>{{ m.nome }}</td><td>{{ m.quantidade }}</td><td>{{ m.preco }}</td>
+          <td>R$ {{ '%.2f'|format(m.custo) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if projeto.equipamentos %}
+<div class="card mb-4">
+  <div class="card-header">Detalhamento de equipamentos</div>
+  <div class="card-body">
+    <table class="table">
+      <thead><tr><th>Nome</th><th>Horas</th><th>Custo/hora</th><th>Custo</th></tr></thead>
+      <tbody>
+        {% for e in projeto.equipamentos %}
+        <tr>
+          <td>{{ e.nome }}</td><td>{{ e.horas }}</td><td>{{ e.custo_hora }}</td>
+          <td>R$ {{ '%.2f'|format(e.custo) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if projeto.estatisticas.n > 0 %}
+<div class="card mb-4">
+  <div class="card-header">Estatísticas dos experimentos (n={{ projeto.estatisticas.n }})</div>
+  <div class="card-body">
+    <p class="mb-1">Média: {{ '%.2f'|format(projeto.estatisticas.media) }}</p>
+    <p class="mb-1">Desvio padrão: {{ '%.2f'|format(projeto.estatisticas.desvio_padrao) }}</p>
+    <p class="mb-0">RSD (desvio relativo): {{ '%.2f'|format(projeto.estatisticas.rsd) }}%</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-header">Cenários</div>
+  <div class="card-body">
+    <table class="table mb-0">
+      <tr><td>Otimista (-10%)</td><td>R$ {{ '%.2f'|format(cenarios.otimista) }}</td></tr>
+      <tr><td>Esperado</td><td>R$ {{ '%.2f'|format(cenarios.esperado) }}</td></tr>
+      <tr><td>Pessimista (+20%)</td><td>R$ {{ '%.2f'|format(cenarios.pessimista) }}</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">Análise de sensibilidade</div>
+  <div class="card-body">
+    <table class="table mb-0">
+      <thead><tr><th>Variação</th><th>Custo resultante</th></tr></thead>
+      <tbody>
+        {% for s in sensibilidade %}
+        <tr><td>{{ s.variacao }}%</td><td>R$ {{ '%.2f'|format(s.custo) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if comparacao|length > 1 %}
+<div class="card mb-4">
+  <div class="card-header">Comparação com alternativas</div>
+  <div class="card-body">
+    <table class="table mb-0">
+      <thead><tr><th>Nome</th><th>Custo</th><th>Tempo</th><th>Rendimento</th></tr></thead>
+      <tbody>
+        {% for c in comparacao %}
+        <tr>
+          <td>{{ c.nome }}</td><td>R$ {{ '%.2f'|format(c.custo) }}</td>
+          <td>{{ c.tempo }}</td><td>{{ c.rendimento }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<a href="{{ url_for('homepage') }}" class="btn btn-secondary">Nova análise</a>
+{% endblock %}

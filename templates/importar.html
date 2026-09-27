@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Importar planilha - Análise de Viabilidade{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Importar planilha do projeto</h1>
+
+<div class="alert alert-info">
+  A planilha deve ser um arquivo <strong>.xlsx</strong> com as seguintes abas:
+  <ul class="mb-0">
+    <li><strong>Parametros</strong>: colunas <code>nome, tempo, rendimento, energia, mao_obra, outros, quantidade_produzida</code> (uma única linha de dados)</li>
+    <li><strong>Materiais</strong>: colunas <code>nome, quantidade, preco</code></li>
+    <li><strong>Equipamentos</strong>: colunas <code>nome, horas, custo_hora</code></li>
+    <li><strong>Experimentos</strong>: coluna <code>valor</code> (uma linha por medição)</li>
+    <li><strong>Alternativas</strong> (opcional): colunas <code>nome, custo, tempo, rendimento</code></li>
+  </ul>
+</div>
+
+<p>
+  <a href="{{ url_for('static', filename='modelo_planilha.xlsx') }}" class="btn btn-outline-secondary btn-sm mb-3">
+    Baixar planilha modelo
+  </a>
+</p>
+
+<form method="post" action="{{ url_for('importar_planilha_resultado') }}" enctype="multipart/form-data">
+  <div class="mb-3">
+    <input class="form-control" type="file" name="planilha" accept=".xlsx">
+  </div>
+  <button type="submit" class="btn btn-primary">Enviar e calcular</button>
+</form>
+{% endblock %}

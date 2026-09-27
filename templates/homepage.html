@@ -1,11 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    
-</body>
-</html>
+{% extends 'base.html' %}
+{% block title %}Análise de Viabilidade Econômica{% endblock %}
+{% block content %}
+<div class="p-5 bg-white rounded-3 shadow-sm">
+  <h1 class="mb-3">Análise de Viabilidade Econômica de Projetos Acadêmicos</h1>
+  <p class="lead">
+    Calcule custos de materiais, equipamentos, mão de obra e energia,
+    veja cenários otimista/pessimista, análise de sensibilidade e compare
+    seu projeto com alternativas.
+  </p>
+  <div class="d-flex gap-3 mt-4">
+    <a href="{{ url_for('analise_manual') }}" class="btn btn-primary btn-lg">Inserir dados manualmente</a>
+    <a href="{{ url_for('importar_planilha') }}" class="btn btn-outline-primary btn-lg">Importar planilha Excel</a>
+  </div>
+</div>
+{% endblock %}
