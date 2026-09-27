@@ -3,6 +3,21 @@
 {% block content %}
 <h1 class="h3 mb-4">Resultado: {{ projeto.nome }}</h1>
 
+<div class="alert {{ 'alert-success' if investimento.viavel else 'alert-danger' }} mb-4">
+  <h4 class="alert-heading mb-2">
+    {% if investimento.viavel %}
+      ✅ O projeto é economicamente viável
+    {% else %}
+      ❌ O projeto não é economicamente viável
+    {% endif %}
+  </h4>
+  <ul class="mb-0">
+    {% for motivo in investimento.motivos %}
+      <li>{{ motivo }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
 <div class="row g-4 mb-4">
   <div class="col-md-4">
     <div class="card text-center h-100">
@@ -88,6 +103,46 @@
     <p class="mb-1">Média: {{ '%.2f'|format(projeto.estatisticas.media) }}</p>
     <p class="mb-1">Desvio padrão: {{ '%.2f'|format(projeto.estatisticas.desvio_padrao) }}</p>
     <p class="mb-0">RSD (desvio relativo): {{ '%.2f'|format(projeto.estatisticas.rsd) }}%</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-header">Análise de investimento</div>
+  <div class="card-body">
+    <table class="table mb-0">
+      <tr><td>Investimento inicial considerado</td><td>R$ {{ '%.2f'|format(investimento.investimento_inicial) }}</td></tr>
+      <tr><td>Taxa mínima de atratividade (TMA)</td><td>{{ '%.2f'|format(investimento.taxa_desconto) }}% por período</td></tr>
+      <tr><td>Número de períodos informados</td><td>{{ investimento.numero_periodos }}</td></tr>
+      <tr><td>Valor residual ao final</td><td>R$ {{ '%.2f'|format(investimento.valor_residual) }}</td></tr>
+      <tr><td>Valor Presente (VP) dos fluxos de caixa futuros</td><td>R$ {{ '%.2f'|format(investimento.valor_presente_fluxos) }}</td></tr>
+      {% if investimento.valor_residual %}
+      <tr><td>Valor Presente (VP) do valor residual</td><td>R$ {{ '%.2f'|format(investimento.valor_presente_residual) }}</td></tr>
+      {% endif %}
+      <tr><td>Valor Futuro (VF) do investimento inicial na TMA</td><td>R$ {{ '%.2f'|format(investimento.valor_futuro_investimento) }}</td></tr>
+      <tr class="table-active"><td><strong>Valor Presente Líquido (VPL)</strong></td><td><strong>R$ {{ '%.2f'|format(investimento.vpl) }}</strong></td></tr>
+      <tr>
+        <td><strong>Taxa Interna de Retorno (TIR)</strong></td>
+        <td><strong>{{ '%.2f'|format(investimento.tir) + '%' if investimento.tir is not none else 'não foi possível calcular' }}</strong></td>
+      </tr>
+      <tr><td>Payback simples</td><td>{{ '%.2f períodos'|format(investimento.payback_simples) if investimento.payback_simples is not none else 'não recupera dentro do prazo informado' }}</td></tr>
+      <tr><td>Payback descontado</td><td>{{ '%.2f períodos'|format(investimento.payback_descontado) if investimento.payback_descontado is not none else 'não recupera dentro do prazo informado' }}</td></tr>
+    </table>
+  </div>
+</div>
+
+{% if investimento.fluxos_caixa %}
+<div class="card mb-4">
+  <div class="card-header">Fluxo de caixa informado</div>
+  <div class="card-body">
+    <table class="table mb-0">
+      <thead><tr><th>Período</th><th>Fluxo de caixa</th></tr></thead>
+      <tbody>
+        {% for fluxo in investimento.fluxos_caixa %}
+        <tr><td>{{ loop.index }}</td><td>R$ {{ '%.2f'|format(fluxo) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 {% endif %}

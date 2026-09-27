@@ -93,6 +93,44 @@
   </div>
 
   <div class="card mb-4">
+    <div class="card-header">Análise de investimento</div>
+    <div class="card-body row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Investimento inicial (R$)</label>
+        <input type="text" class="form-control" name="investimento_inicial" placeholder="Deixe em branco para usar o custo total do projeto">
+        <div class="form-text">Se deixado em branco, o custo total calculado acima é usado como investimento inicial.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Taxa mínima de atratividade (% por período)</label>
+        <input type="text" class="form-control" name="taxa_desconto" value="10">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Valor residual ao final (R$)</label>
+        <input type="text" class="form-control" name="valor_residual" value="0">
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      Fluxo de caixa esperado (um valor por período: receita ou economia gerada menos custos operacionais daquele período)
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('fluxo_caixa')">+ período</button>
+    </div>
+    <div class="card-body">
+      <table class="table" id="tabela-fluxo_caixa">
+        <thead><tr><th>Período</th><th>Fluxo de caixa líquido (R$)</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><input type="text" class="form-control" name="fluxo_caixa_valor"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="form-text">Adicione uma linha para cada período (ex.: cada ano) de vida útil do projeto.</div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
       Alternativas para comparação (opcional)
       <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('alternativas')">+ alternativa</button>
@@ -122,10 +160,18 @@ function adicionarLinha(tipo) {
     equipamentos: {id: 'tabela-equipamentos', campos: ['equipamento_nome', 'equipamento_horas', 'equipamento_custo_hora']},
     experimentos: {id: 'tabela-experimentos', campos: ['experimento_valor']},
     alternativas: {id: 'tabela-alternativas', campos: ['alt_nome', 'alt_custo', 'alt_tempo', 'alt_rendimento']},
+    fluxo_caixa: {id: 'tabela-fluxo_caixa', campos: ['fluxo_caixa_valor'], comPeriodo: true},
   };
   const config = tabelas[tipo];
   const tbody = document.querySelector('#' + config.id + ' tbody');
   const linha = document.createElement('tr');
+
+  if (config.comPeriodo) {
+    const tdPeriodo = document.createElement('td');
+    tdPeriodo.textContent = tbody.querySelectorAll('tr').length + 1;
+    linha.appendChild(tdPeriodo);
+  }
+
   config.campos.forEach(campo => {
     const td = document.createElement('td');
     const input = document.createElement('input');
