@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Resultado da viabilidade{% endblock %}
+{% block content %}
+{% set n = r.cenarios|length %}
+{% set col = (12 // n) if n <= 3 else 4 %}
+<h1 class="h3 mb-3">Resultado da análise de viabilidade</h1>
+<p class="text-muted">Valores na moeda e na periodicidade informadas. A análise usa taxa de desconto de {{ r.taxa_desconto|num(2) }}% ao ano.</p>
+
+<div class="row g-3 mb-3">
+  {% for c in r.cenarios %}
+  {% set v = c.viabilidade %}
+  <div class="col-md-{{ col }}">
+    <div class="alert {{ 'alert-success' if v.viavel else 'alert-danger' }} h-100 mb-0">
+      <div class="small text-uppercase fw-bold">{{ c.nome }}</div>
+      <h2 class="h5 alert-heading mt-1">{% if v.viavel %}Economicamente viável{% else %}Não é economicamente viável{% endif %}</h2>
+      <ul class="small mb-0">{% for motivo in v.motivos %}<li>{{ motivo }}</li>{% endfor %}</ul>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if r.melhor %}<p>Cenário com maior VPL: <strong>{{ r.melhor }}</strong>.</p>{% endif %}
+{% for c in r.cenarios if c.avisos %}
+<div class="alert alert-warning"><strong>{{ c.nome }} — atenção:</strong><ul class="mb-0">{% for aviso in c.avisos %}<li>{{ aviso }}</li>{% endfor %}</ul></div>
+{% endfor %}
+
+<div class="card mb-4">
+  <div class="card-header">Comparação dos indicadores</div>
+  <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+    <thead class="table-light"><tr><th>Indicador</th>{% for c in r.cenarios %}<th class="text-end">{{ c.nome }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      <tr><td>Investimento inicial</td>{% for c in r.cenarios %}<td class="text-end">{{ c.investimento_inicial|num(2) }}</td>{% endfor %}</tr>
+      <tr><td>Receitas e benefícios por ano</td>{% for c in r.cenarios %}<td class="text-end">{{ c.beneficios_anuais|num(2) if c.beneficios else 'Não informado separadamente' }}</td>{% endfor %}</tr>
+      <tr><td>Custos e despesas por ano</td>{% for c in r.cenarios %}<td class="text-end">{{ c.custos_anuais|num(2) if c.custos else 'Não informado separadamente' }}</td>{% endfor %}</tr>
+      <tr><td>Depreciação linear por ano</td>{% for c in r.cenarios %}<td class="text-end">{{ c.depreciacao_anual|num(2) if not c.fluxo_direto else 'Não separada no fluxo importado' }}</td>{% endfor %}</tr>
+      <tr><td>Lucro anual antes do imposto</td>{% for c in r.cenarios %}<td class="text-end">{{ c.lucro_antes_imposto|num(2) if not c.fluxo_direto else 'Não separado no fluxo importado' }}</td>{% endfor %}</tr>
+      <tr><td>Imposto anual estimado</td>{% for c in r.cenarios %}<td class="text-end">{{ c.imposto_anual|num(2) if not c.fluxo_direto else 'Incluído ou não informado no fluxo importado' }}</td>{% endfor %}</tr>
+      <tr><td>Fluxo líquido médio por ano</td>{% for c in r.cenarios %}<td class="text-end">{{ c.fluxo_anual|num(2) }}</td>{% endfor %}</tr>
+      <tr><td>Horizonte</td>{% for c in r.cenarios %}<td class="text-end">{{ c.anos }} anos</td>{% endfor %}</tr>
+      <tr><td>Valor residual</td>{% for c in r.cenarios %}<td class="text-end">{{ c.valor_residual|num(2) }}</td>{% endfor %}</tr>
+      <tr class="table-active"><td><strong>VPL</strong></td>{% for c in r.cenarios %}<td class="text-end"><strong>{{ c.viabilidade.vpl|num(2) }}</strong></td>{% endfor %}</tr>
+      <tr><td>TIR</td>{% for c in r.cenarios %}<td class="text-end">{{ (c.viabilidade.tir|num(2) ~ '%') if c.viabilidade.tir is not none else 'Não calculável' }}</td>{% endfor %}</tr>
+      <tr><td>Payback simples</td>{% for c in r.cenarios %}<td class="text-end">{{ (c.viabilidade.payback_simples|num(2) ~ ' anos') if c.viabilidade.payback_simples is not none else 'Não recuperado no prazo' }}</td>{% endfor %}</tr>
+      <tr><td>Payback descontado</td>{% for c in r.cenarios %}<td class="text-end">{{ (c.viabilidade.payback_descontado|num(2) ~ ' anos') if c.viabilidade.payback_descontado is not none else 'Não recuperado no prazo' }}</td>{% endfor %}</tr>
+    </tbody>
+  </table></div>
+</div>
+
+{% for c in r.cenarios %}
+<details class="card mb-3">
+  <summary class="card-header" style="cursor:pointer"><strong>{{ c.nome }}</strong> — fluxo de caixa e itens importados</summary>
+  <div class="card-body">
+    <h2 class="h6">Fluxo de caixa por ano</h2>
+    <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Ano</th><th class="text-end">Fluxo líquido</th></tr></thead><tbody>
+      {% for valor in c.fluxos_caixa %}<tr><td>{{ loop.index }}</td><td class="text-end">{{ valor|num(2) }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if c.beneficios %}<h2 class="h6 mt-4">Receitas e benefícios anuais</h2><ul>{% for item in c.beneficios %}<li>{{ item.nome }}: {% if item.valor_unitario %}{{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {% endif %}{{ item.valor|num(2) }}</li>{% endfor %}</ul>{% endif %}
+    {% if c.custos %}<h2 class="h6 mt-4">Custos e despesas anuais</h2><ul>{% for item in c.custos %}<li>{{ item.nome }}: {% if item.valor_unitario %}{{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {% endif %}{{ item.valor|num(2) }}</li>{% endfor %}</ul>{% endif %}
+    {% if c.investimentos %}<h2 class="h6 mt-4">Itens do investimento inicial</h2><ul>{% for item in c.investimentos %}<li>{{ item.nome }}: {{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {{ item.valor|num(2) }}</li>{% endfor %}</ul>{% endif %}
+    {% if c.ativos_depreciaveis %}<h2 class="h6 mt-4">Depreciação linear anual</h2><ul>{% for ativo in c.ativos_depreciaveis %}<li>{{ ativo.nome }}: {{ ativo.base|num(2) }} ÷ {{ ativo.vida_util|num(0) }} anos = {{ ativo.depreciacao_anual|num(2) }} por ano</li>{% endfor %}</ul>{% endif %}
+  </div>
+</details>
+{% endfor %}
+<a href="{{ url_for('homepage') }}" class="btn btn-secondary">Nova análise</a>
+{% endblock %}

@@ -1,16 +1,15 @@
+import math
+import re
+
 from main import app
 from flask import render_template, request, redirect, url_for, flash
 
-from analysis import (
-    calcular_projeto,
-    comparar_alternativas,
-    calcular_cenarios,
-    analise_sensibilidade,
-    analisar_viabilidade_investimento,
-    numero,
-)
-from excel_utils import ler_planilha_projeto
+from analysis import numero
+from generic_excel import ler_planilha_generica
+from project_analysis import analisar_projeto
+from tea import fmt_num
 
+app.add_template_filter(fmt_num, "num")
 
 @app.route('/')
 def homepage():
@@ -21,17 +20,29 @@ def homepage():
 
 @app.route('/analise-manual')
 def analise_manual():
-    return render_template('formulario.html')
+    globais = {"taxa_desconto": "", "vida_projeto": "", "taxa_imposto": ""}
+    cenario = {"nome": "", "investimento_inicial": "", "valor_residual": "",
+               "investimentos": [{}],
+               "beneficios": [{"nome": "", "valor": ""}],
+               "custos": [{"nome": "", "valor": ""}], "ativos_depreciaveis": [{}]}
+    return render_template('formulario.html', g=globais, cens=[cenario])
 
 
 @app.route('/analise-manual/resultado', methods=['POST'])
 def analise_manual_resultado():
-    dados = _extrair_dados_formulario(request.form)
-    alternativas = _extrair_alternativas_formulario(request.form)
-    investimento = _extrair_investimento_formulario(request.form)
+    globais = {
+        "taxa_desconto": request.form.get("taxa_desconto", ""),
+        "vida_projeto": request.form.get("vida_projeto", ""),
+        "taxa_imposto": request.form.get("taxa_imposto", ""),
+    }
+    cenarios = _extrair_projetos(request.form)
 
-    resultado = _processar(dados, alternativas, investimento)
-    return render_template('resultado.html', **resultado)
+    erro = _validar_projetos(globais, cenarios)
+    if erro:
+        flash(erro)
+        return redirect(url_for('analise_manual'))
+
+    return render_template('resultado_generico.html', r=analisar_projeto(globais, cenarios))
 
 
 # ---------- Importação de planilha ----------
@@ -54,120 +65,117 @@ def importar_planilha_resultado():
         return redirect(url_for('importar_planilha'))
 
     try:
-        dados, alternativas, investimento = ler_planilha_projeto(arquivo)
+        resultado = ler_planilha_generica(arquivo)
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for('importar_planilha'))
     except Exception:
-        flash('Não foi possível ler a planilha. Confira se ela segue o modelo esperado.')
+        flash('Não foi possível ler a planilha. Confira se ela está no formato .xlsx e use uma das planilhas compatíveis ou a planilha-modelo do site.')
         return redirect(url_for('importar_planilha'))
 
-    resultado = _processar(dados, alternativas, investimento)
-    return render_template('resultado.html', **resultado)
+    return render_template('resultado_generico.html', r=resultado)
 
 
 # ---------- Funções auxiliares ----------
 
-def _processar(dados, alternativas, investimento=None):
-    """Roda toda a análise de viabilidade (custos + investimento) para um conjunto de dados."""
-    projeto = calcular_projeto(dados)
-
-    projeto['nome'] = dados.get('nome', 'Projeto proposto')
-    projeto['tempo'] = dados.get('tempo', 0)
-    projeto['rendimento'] = dados.get('rendimento', 0)
-    projeto['materiais'] = dados.get('materiais', [])
-    projeto['equipamentos'] = dados.get('equipamentos', [])
-
-    cenarios = calcular_cenarios(projeto['custo_total'])
-    sensibilidade = analise_sensibilidade(projeto['custo_total'])
-    comparacao = comparar_alternativas(projeto, alternativas)
-
-    investimento = investimento or {}
-
-    investimento_inicial = investimento.get('investimento_inicial')
-    # Se o usuário não informar um investimento inicial próprio, usa o custo
-    # total já calculado do projeto — é ele que está "saindo do bolso".
-    if investimento_inicial in (None, '', 0):
-        investimento_inicial = projeto['custo_total']
-
-    fluxos_caixa = investimento.get('fluxos_caixa', [])
-    taxa_desconto = investimento.get('taxa_desconto', 0)
-    valor_residual = investimento.get('valor_residual', 0)
-
-    analise_investimento = analisar_viabilidade_investimento(
-        investimento_inicial=investimento_inicial,
-        fluxos_caixa=fluxos_caixa,
-        taxa=taxa_desconto,
-        valor_residual=valor_residual,
-    )
-    analise_investimento['fluxos_caixa'] = [numero(f) for f in fluxos_caixa]
-
-    return {
-        'projeto': projeto,
-        'cenarios': cenarios,
-        'sensibilidade': sensibilidade,
-        'comparacao': comparacao,
-        'investimento': analise_investimento,
-    }
-
-
-def _extrair_dados_formulario(form):
-    """Monta o dicionário 'dados' a partir dos campos do formulário manual."""
-
-    nomes = form.getlist('material_nome')
-    quantidades = form.getlist('material_quantidade')
-    precos = form.getlist('material_preco')
-    materiais = [
-        {'nome': n, 'quantidade': q, 'preco': p}
-        for n, q, p in zip(nomes, quantidades, precos)
-        if n or q or p
-    ]
-
-    eq_nomes = form.getlist('equipamento_nome')
-    eq_horas = form.getlist('equipamento_horas')
-    eq_custos = form.getlist('equipamento_custo_hora')
-    equipamentos = [
-        {'nome': n, 'horas': h, 'custo_hora': c}
-        for n, h, c in zip(eq_nomes, eq_horas, eq_custos)
-        if n or h or c
-    ]
-
-    experimentos = [
-        v for v in form.getlist('experimento_valor') if v not in (None, '')
-    ]
-
-    return {
-        'nome': form.get('nome_projeto') or 'Projeto proposto',
-        'materiais': materiais,
-        'equipamentos': equipamentos,
-        'energia': form.get('energia', 0),
-        'mao_obra': form.get('mao_obra', 0),
-        'outros': form.get('outros', 0),
-        'quantidade_produzida': form.get('quantidade_produzida', 0),
-        'tempo': form.get('tempo', 0),
-        'rendimento': form.get('rendimento', 0),
-        'experimentos': experimentos,
-    }
+def _extrair_projetos(form):
+    indices = sorted({
+        int(m.group(1)) for k in form.keys() if (m := re.match(r'c(\d+)_nome$', k))
+    })
+    projetos = []
+    for i in indices:
+        c = {
+            "nome": form.get(f"c{i}_nome", "").strip(),
+            "investimento_inicial": form.get(f"c{i}_investimento", ""),
+            "valor_residual": form.get(f"c{i}_residual", ""),
+            "investimentos": [], "beneficios": [], "custos": [],
+        }
+        cap_names = form.getlist(f"c{i}_capital_nome")
+        cap_quantities = form.getlist(f"c{i}_capital_quantidade")
+        cap_units = form.getlist(f"c{i}_capital_unitario")
+        c["investimentos"] = [
+            {"nome": name.strip() or "Investimento", "quantidade": quantity, "valor_unitario": unit}
+            for name, quantity, unit in zip(cap_names, cap_quantities, cap_units)
+            if str(name).strip() or str(quantity).strip() or str(unit).strip()
+        ]
+        for kind in ("beneficio", "custo"):
+            names = form.getlist(f"c{i}_{kind}_nome")
+            quantities = form.getlist(f"c{i}_{kind}_quantidade")
+            unit_values = form.getlist(f"c{i}_{kind}_unitario")
+            items = []
+            for name, quantity, unit_value in zip(names, quantities, unit_values):
+                if not (str(name).strip() or str(quantity).strip() or str(unit_value).strip()):
+                    continue
+                items.append({
+                    "nome": name.strip() or ("Benefício" if kind == "beneficio" else "Custo"),
+                    "quantidade": quantity,
+                    "valor_unitario": unit_value,
+                })
+            c["beneficios" if kind == "beneficio" else "custos"] = items
+        nomes_ativos = form.getlist(f"c{i}_ativo_nome")
+        bases_ativos = form.getlist(f"c{i}_ativo_base")
+        vidas_ativos = form.getlist(f"c{i}_ativo_vida")
+        c["ativos_depreciaveis"] = [
+            {"nome": nome, "base": base, "vida_util": vida}
+            for nome, base, vida in zip(nomes_ativos, bases_ativos, vidas_ativos)
+            if str(nome).strip() or str(base).strip() or str(vida).strip()
+        ]
+        if c["nome"] or c["investimento_inicial"] or c["investimentos"] or c["beneficios"] or c["custos"]:
+            projetos.append(c)
+    return projetos
 
 
-def _extrair_investimento_formulario(form):
-    fluxos_caixa = [
-        v for v in form.getlist('fluxo_caixa_valor') if v not in (None, '')
-    ]
+def _validar_projetos(globais, projetos):
+    if not projetos:
+        return "Informe pelo menos um projeto ou cenário."
+    if not _numero_valido(globais.get("taxa_desconto")):
+        return "Informe a taxa mínima de atratividade ou taxa de desconto."
+    if not _numero_valido(globais.get("vida_projeto")) or numero(globais.get("vida_projeto")) <= 0:
+        return "Informe um horizonte de análise maior que zero."
+    if numero(globais.get("vida_projeto")) % 1:
+        return "Informe o horizonte em anos inteiros."
+    if str(globais.get("taxa_imposto", "")).strip():
+        if not _numero_valido(globais.get("taxa_imposto")) or not 0 <= numero(globais.get("taxa_imposto")) <= 100:
+            return "A taxa de imposto opcional deve estar entre 0 e 100%."
+    for i, p in enumerate(projetos, 1):
+        for j, item in enumerate(p.get("investimentos", []), 1):
+            if not _numero_valido(item.get("quantidade")) or not _numero_valido(item.get("valor_unitario")):
+                return f"Preencha quantidade e valor unitário do item de investimento {j} no cenário {i}."
+            if numero(item["quantidade"]) < 0 or numero(item["valor_unitario"]) < 0:
+                return f"Quantidade e valor unitário do investimento não podem ser negativos (cenário {i})."
+        total_investido = sum(numero(x.get("quantidade")) * numero(x.get("valor_unitario")) for x in p.get("investimentos", []))
+        investimento_direto = p.get("investimento_inicial")
+        if total_investido <= 0 and (not _numero_valido(investimento_direto) or numero(investimento_direto) <= 0):
+            return f"Informe ao menos um item de investimento inicial no cenário {i}."
+        if str(p.get("valor_residual", "")).strip() and not _numero_valido(p.get("valor_residual")):
+            return f"Confira o valor residual informado no cenário {i}."
+        if numero(p.get("valor_residual")) < 0:
+            return f"O valor residual não pode ser negativo (cenário {i})."
+        for j, ativo in enumerate(p.get("ativos_depreciaveis", []), 1):
+            if not _numero_valido(ativo.get("base")) or not _numero_valido(ativo.get("vida_util")):
+                return f"Preencha a base depreciável e a vida útil do ativo {j} no cenário {i}, ou remova a linha."
+            if numero(ativo["base"]) < 0 or numero(ativo["vida_util"]) <= 0:
+                return f"A base depreciável não pode ser negativa e a vida útil deve ser maior que zero (cenário {i})."
+        if not p["beneficios"] and not p["custos"]:
+            return f"Informe ao menos um benefício/receita ou custo/despesa anual no cenário {i}."
+        for tipo, itens in (("benefício/receita", p["beneficios"]), ("custo/despesa", p["custos"])):
+            for j, item in enumerate(itens, 1):
+                if not _numero_valido(item.get("quantidade")) or not _numero_valido(item.get("valor_unitario")):
+                    return f"Preencha quantidade e valor unitário do item {j} de {tipo} no cenário {i}."
+                if numero(item["quantidade"]) < 0 or numero(item["valor_unitario"]) < 0:
+                    return f"Quantidade e valor unitário não podem ser negativos (cenário {i})."
+    return None
 
-    return {
-        'investimento_inicial': form.get('investimento_inicial') or None,
-        'taxa_desconto': form.get('taxa_desconto', 0),
-        'valor_residual': form.get('valor_residual', 0),
-        'fluxos_caixa': fluxos_caixa,
-    }
 
-
-def _extrair_alternativas_formulario(form):
-    nomes = form.getlist('alt_nome')
-    custos = form.getlist('alt_custo')
-    tempos = form.getlist('alt_tempo')
-    rendimentos = form.getlist('alt_rendimento')
-
-    return [
-        {'nome': n, 'custo': c, 'tempo': t, 'rendimento': r}
-        for n, c, t, r in zip(nomes, custos, tempos, rendimentos)
-        if n or c or t or r
-    ]
+def _numero_valido(valor):
+    texto = str(valor if valor is not None else "").strip().replace(" ", "")
+    if not texto:
+        return False
+    if "," in texto and "." in texto:
+        texto = texto.replace(".", "").replace(",", ".") if texto.rfind(",") > texto.rfind(".") else texto.replace(",", "")
+    else:
+        texto = texto.replace(",", ".")
+    try:
+        return math.isfinite(float(texto))
+    except ValueError:
+        return False

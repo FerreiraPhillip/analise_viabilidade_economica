@@ -1,195 +1,127 @@
 {% extends 'base.html' %}
 {% block title %}Resultado - Análise de Viabilidade{% endblock %}
 {% block content %}
-<h1 class="h3 mb-4">Resultado: {{ projeto.nome }}</h1>
+{% set n = r.cenarios|length %}
+{% set col = (12 // n) if n <= 3 else 4 %}
 
-<div class="alert {{ 'alert-success' if investimento.viavel else 'alert-danger' }} mb-4">
-  <h4 class="alert-heading mb-2">
-    {% if investimento.viavel %}
-      ✅ O projeto é economicamente viável
-    {% else %}
-      ❌ O projeto não é economicamente viável
-    {% endif %}
-  </h4>
-  <ul class="mb-0">
-    {% for motivo in investimento.motivos %}
-      <li>{{ motivo }}</li>
-    {% endfor %}
-  </ul>
+<h1 class="h3 mb-3">Resultado da análise de viabilidade</h1>
+
+<div class="row g-3 mb-3">
+  {% for c in r.cenarios %}
+  {% set v = c.viabilidade %}
+  <div class="col-md-{{ col }}">
+    <div class="alert {{ 'alert-success' if v.viavel else 'alert-danger' }} h-100 mb-0">
+      <div class="small text-uppercase fw-bold">{{ c.nome }}</div>
+      <h5 class="alert-heading mt-1">
+        {% if v.viavel %}✅ Economicamente viável{% else %}❌ Não é economicamente viável{% endif %}
+      </h5>
+      <ul class="small mb-0">
+        {% for m in v.motivos %}<li>{{ m }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endfor %}
 </div>
 
-<div class="row g-4 mb-4">
-  <div class="col-md-4">
-    <div class="card text-center h-100">
-      <div class="card-body">
-        <h6 class="card-subtitle text-muted">Custo total</h6>
-        <p class="h4">R$ {{ '%.2f'|format(projeto.custo_total) }}</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card text-center h-100">
-      <div class="card-body">
-        <h6 class="card-subtitle text-muted">Custo unitário</h6>
-        <p class="h4">R$ {{ '%.2f'|format(projeto.custo_unitario) }}</p>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card text-center h-100">
-      <div class="card-body">
-        <h6 class="card-subtitle text-muted">Quantidade produzida</h6>
-        <p class="h4">{{ '%.0f'|format(projeto.quantidade_produzida) }}</p>
-      </div>
-    </div>
-  </div>
+{% if r.melhor %}
+<p class="mb-3">
+  {% if r.cenarios|selectattr('viabilidade.viavel')|list|length == 0 %}
+    Nenhum cenário atinge a viabilidade com os dados informados. O de maior VPL (menor prejuízo) é <strong>{{ r.melhor }}</strong>.
+  {% else %}
+    Cenário de maior VPL: <strong>{{ r.melhor }}</strong>.
+  {% endif %}
+</p>
+{% endif %}
+
+{% for c in r.cenarios if c.avisos %}
+<div class="alert alert-warning">
+  <strong>{{ c.nome }} — atenção:</strong>
+  <ul class="mb-0">{% for a in c.avisos %}<li>{{ a }}</li>{% endfor %}</ul>
 </div>
+{% endfor %}
 
 <div class="card mb-4">
-  <div class="card-header">Composição de custos</div>
-  <div class="card-body">
-    <table class="table mb-0">
-      <tr><td>Materiais</td><td>R$ {{ '%.2f'|format(projeto.custo_materiais) }}</td></tr>
-      <tr><td>Equipamentos</td><td>R$ {{ '%.2f'|format(projeto.custo_equipamentos) }}</td></tr>
-      <tr><td>Energia</td><td>R$ {{ '%.2f'|format(projeto.energia) }}</td></tr>
-      <tr><td>Mão de obra</td><td>R$ {{ '%.2f'|format(projeto.mao_obra) }}</td></tr>
-      <tr><td>Outros</td><td>R$ {{ '%.2f'|format(projeto.outros) }}</td></tr>
-    </table>
-  </div>
-</div>
-
-{% if projeto.materiais %}
-<div class="card mb-4">
-  <div class="card-header">Detalhamento de materiais</div>
-  <div class="card-body">
-    <table class="table">
-      <thead><tr><th>Nome</th><th>Quantidade</th><th>Preço unitário</th><th>Custo</th></tr></thead>
+  <div class="card-header">Comparação entre cenários <span class="text-muted small">— valores em US$ (por ano, quando indicado)</span></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr><th></th>{% for c in r.cenarios %}<th class="text-end">{{ c.nome }}</th>{% endfor %}</tr>
+      </thead>
       <tbody>
-        {% for m in projeto.materiais %}
+        <tr class="table-secondary"><td colspan="{{ n + 1 }}"><strong>Calculado a partir dos dados (equivale às fórmulas da planilha)</strong></td></tr>
+        <tr><td>Razão CEPCI (índice atual ÷ ano-base)</td>{% for c in r.cenarios %}<td class="text-end">{{ r.razao_cepci|num(4) }}</td>{% endfor %}</tr>
+        <tr><td>Rendimento do processo 1 (produto 1 ÷ entrada)</td>{% for c in r.cenarios %}<td class="text-end">{{ (c.rendimento1 * 100)|num(2) }}%</td>{% endfor %}</tr>
+        <tr><td>Rendimento do processo 2 (produto 2 ÷ entrada)</td>{% for c in r.cenarios %}<td class="text-end">{{ (c.rendimento2 * 100)|num(2) }}%</td>{% endfor %}</tr>
+        <tr><td>Consumo elétrico total (kWh/ano)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.energia_eletrica_kwh|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Custo total de equipamentos</td>{% for c in r.cenarios %}<td class="text-end">{{ c.equipamentos.custo_total|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Preço final do etanol / CO₂ (US$/t)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.precos.etanol|num(2) }} / {{ c.precos.co2|num(2) }}</td>{% endfor %}</tr>
+
+        <tr class="table-secondary"><td colspan="{{ n + 1 }}"><strong>Resultado econômico anual</strong></td></tr>
+        <tr><td>Receita</td>{% for c in r.cenarios %}<td class="text-end">{{ c.receita|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Custo total anual (inclui depreciação)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.custo_total_anual|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Lucro antes do imposto</td>{% for c in r.cenarios %}<td class="text-end">{{ c.lucro_antes_imposto|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Imposto</td>{% for c in r.cenarios %}<td class="text-end">{{ c.imposto|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Lucro líquido</td>{% for c in r.cenarios %}<td class="text-end">{{ c.lucro_liquido|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Fluxo de caixa anual (lucro líquido + depreciação)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.fluxo_caixa_anual|num(2) }}</td>{% endfor %}</tr>
+
+        <tr class="table-secondary"><td colspan="{{ n + 1 }}"><strong>Indicadores de investimento</strong></td></tr>
+        <tr><td>Capital fixo (FCI; base de custos e depreciação)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.fci|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Investimento inicial considerado (TCI)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.investimento_inicial|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Valor residual (ao fim do projeto)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.valor_residual|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Valor presente (VP) dos fluxos de caixa futuros</td>{% for c in r.cenarios %}<td class="text-end">{{ c.viabilidade.valor_presente_fluxos|num(2) }}</td>{% endfor %}</tr>
+        <tr><td>Valor futuro (VF) do investimento na MARR</td>{% for c in r.cenarios %}<td class="text-end">{{ c.viabilidade.valor_futuro_investimento|num(2) }}</td>{% endfor %}</tr>
+        <tr class="table-active"><td><strong>VPL (na MARR)</strong></td>{% for c in r.cenarios %}<td class="text-end"><strong>{{ c.viabilidade.vpl|num(2) }}</strong></td>{% endfor %}</tr>
+        <tr><td>VPL (na WACC)</td>{% for c in r.cenarios %}<td class="text-end">{{ c.vpl_wacc|num(2) }}</td>{% endfor %}</tr>
+        <tr class="table-active"><td><strong>TIR</strong></td>{% for c in r.cenarios %}<td class="text-end"><strong>{{ (c.viabilidade.tir|num(2) ~ '%') if c.viabilidade.tir is not none else 'não calculável' }}</strong></td>{% endfor %}</tr>
+        <tr><td>Payback simples</td>{% for c in r.cenarios %}<td class="text-end">{{ (c.viabilidade.payback_simples|num(2) ~ ' anos') if c.viabilidade.payback_simples is not none else 'não se paga no prazo' }}</td>{% endfor %}</tr>
+        <tr><td>Payback descontado</td>{% for c in r.cenarios %}<td class="text-end">{{ (c.viabilidade.payback_descontado|num(2) ~ ' anos') if c.viabilidade.payback_descontado is not none else 'não se paga no prazo' }}</td>{% endfor %}</tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+{% for c in r.cenarios %}
+<details class="card mb-3">
+  <summary class="card-header" style="cursor:pointer"><strong>{{ c.nome }}</strong> — detalhamento (equipamentos e memória de cálculo dos custos)</summary>
+  <div class="card-body">
+    <h6>Equipamentos</h6>
+    <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th>Equipamento</th><th class="text-end">Qtd.</th><th class="text-end">Custo unit.</th><th class="text-end">Valor ajustado</th><th class="text-end">Total</th><th class="text-end">kWh/ano</th><th>Fonte</th></tr></thead>
+      <tbody>
+        {% for e in c.equipamentos.itens %}
         <tr>
-          <td>{{ m.nome }}</td><td>{{ m.quantidade }}</td><td>{{ m.preco }}</td>
-          <td>R$ {{ '%.2f'|format(m.custo) }}</td>
+          <td>{{ e.nome }}{% if e.ajustado_cepci %} <span class="badge text-bg-secondary">CEPCI</span>{% endif %}</td>
+          <td class="text-end">{{ e.quantidade|num(0) }}</td>
+          <td class="text-end">{{ e.custo_unidade|num(2) }}</td>
+          <td class="text-end">{{ e.valor_ajustado|num(2) }}</td>
+          <td class="text-end">{{ e.total|num(2) }}</td>
+          <td class="text-end">{{ e.consumo_kwh_ano|num(2) }}</td>
+          <td class="small text-muted">{{ e.fonte }}</td>
         </tr>
         {% endfor %}
       </tbody>
+      <tfoot><tr class="table-light"><th>Total do cenário</th><th></th><th></th><th></th><th class="text-end">{{ c.equipamentos.custo_total|num(2) }}</th><th class="text-end">{{ c.equipamentos.consumo_kwh_ano|num(2) }}</th><th></th></tr></tfoot>
     </table>
-  </div>
-</div>
-{% endif %}
+    </div>
 
-{% if projeto.equipamentos %}
-<div class="card mb-4">
-  <div class="card-header">Detalhamento de equipamentos</div>
-  <div class="card-body">
-    <table class="table">
-      <thead><tr><th>Nome</th><th>Horas</th><th>Custo/hora</th><th>Custo</th></tr></thead>
+    <h6 class="mt-4">Custos anuais — como cada item foi calculado</h6>
+    <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th>Item</th><th class="text-end">US$/ano</th><th>Cálculo</th></tr></thead>
       <tbody>
-        {% for e in projeto.equipamentos %}
-        <tr>
-          <td>{{ e.nome }}</td><td>{{ e.horas }}</td><td>{{ e.custo_hora }}</td>
-          <td>R$ {{ '%.2f'|format(e.custo) }}</td>
-        </tr>
+        {% for k in c.custos %}
+        <tr><td>{{ k.nome }}</td><td class="text-end">{{ k.valor|num(2) }}</td><td class="small text-muted">{{ k.formula }}</td></tr>
         {% endfor %}
       </tbody>
+      <tfoot><tr class="table-light"><th>Custo total anual</th><th class="text-end">{{ c.custo_total_anual|num(2) }}</th><th></th></tr></tfoot>
     </table>
+    </div>
   </div>
-</div>
-{% endif %}
-
-{% if projeto.estatisticas.n > 0 %}
-<div class="card mb-4">
-  <div class="card-header">Estatísticas dos experimentos (n={{ projeto.estatisticas.n }})</div>
-  <div class="card-body">
-    <p class="mb-1">Média: {{ '%.2f'|format(projeto.estatisticas.media) }}</p>
-    <p class="mb-1">Desvio padrão: {{ '%.2f'|format(projeto.estatisticas.desvio_padrao) }}</p>
-    <p class="mb-0">RSD (desvio relativo): {{ '%.2f'|format(projeto.estatisticas.rsd) }}%</p>
-  </div>
-</div>
-{% endif %}
-
-<div class="card mb-4">
-  <div class="card-header">Análise de investimento</div>
-  <div class="card-body">
-    <table class="table mb-0">
-      <tr><td>Investimento inicial considerado</td><td>R$ {{ '%.2f'|format(investimento.investimento_inicial) }}</td></tr>
-      <tr><td>Taxa mínima de atratividade (TMA)</td><td>{{ '%.2f'|format(investimento.taxa_desconto) }}% por período</td></tr>
-      <tr><td>Número de períodos informados</td><td>{{ investimento.numero_periodos }}</td></tr>
-      <tr><td>Valor residual ao final</td><td>R$ {{ '%.2f'|format(investimento.valor_residual) }}</td></tr>
-      <tr><td>Valor Presente (VP) dos fluxos de caixa futuros</td><td>R$ {{ '%.2f'|format(investimento.valor_presente_fluxos) }}</td></tr>
-      {% if investimento.valor_residual %}
-      <tr><td>Valor Presente (VP) do valor residual</td><td>R$ {{ '%.2f'|format(investimento.valor_presente_residual) }}</td></tr>
-      {% endif %}
-      <tr><td>Valor Futuro (VF) do investimento inicial na TMA</td><td>R$ {{ '%.2f'|format(investimento.valor_futuro_investimento) }}</td></tr>
-      <tr class="table-active"><td><strong>Valor Presente Líquido (VPL)</strong></td><td><strong>R$ {{ '%.2f'|format(investimento.vpl) }}</strong></td></tr>
-      <tr>
-        <td><strong>Taxa Interna de Retorno (TIR)</strong></td>
-        <td><strong>{{ '%.2f'|format(investimento.tir) + '%' if investimento.tir is not none else 'não foi possível calcular' }}</strong></td>
-      </tr>
-      <tr><td>Payback simples</td><td>{{ '%.2f períodos'|format(investimento.payback_simples) if investimento.payback_simples is not none else 'não recupera dentro do prazo informado' }}</td></tr>
-      <tr><td>Payback descontado</td><td>{{ '%.2f períodos'|format(investimento.payback_descontado) if investimento.payback_descontado is not none else 'não recupera dentro do prazo informado' }}</td></tr>
-    </table>
-  </div>
-</div>
-
-{% if investimento.fluxos_caixa %}
-<div class="card mb-4">
-  <div class="card-header">Fluxo de caixa informado</div>
-  <div class="card-body">
-    <table class="table mb-0">
-      <thead><tr><th>Período</th><th>Fluxo de caixa</th></tr></thead>
-      <tbody>
-        {% for fluxo in investimento.fluxos_caixa %}
-        <tr><td>{{ loop.index }}</td><td>R$ {{ '%.2f'|format(fluxo) }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
-
-<div class="card mb-4">
-  <div class="card-header">Cenários</div>
-  <div class="card-body">
-    <table class="table mb-0">
-      <tr><td>Otimista (-10%)</td><td>R$ {{ '%.2f'|format(cenarios.otimista) }}</td></tr>
-      <tr><td>Esperado</td><td>R$ {{ '%.2f'|format(cenarios.esperado) }}</td></tr>
-      <tr><td>Pessimista (+20%)</td><td>R$ {{ '%.2f'|format(cenarios.pessimista) }}</td></tr>
-    </table>
-  </div>
-</div>
-
-<div class="card mb-4">
-  <div class="card-header">Análise de sensibilidade</div>
-  <div class="card-body">
-    <table class="table mb-0">
-      <thead><tr><th>Variação</th><th>Custo resultante</th></tr></thead>
-      <tbody>
-        {% for s in sensibilidade %}
-        <tr><td>{{ s.variacao }}%</td><td>R$ {{ '%.2f'|format(s.custo) }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-{% if comparacao|length > 1 %}
-<div class="card mb-4">
-  <div class="card-header">Comparação com alternativas</div>
-  <div class="card-body">
-    <table class="table mb-0">
-      <thead><tr><th>Nome</th><th>Custo</th><th>Tempo</th><th>Rendimento</th></tr></thead>
-      <tbody>
-        {% for c in comparacao %}
-        <tr>
-          <td>{{ c.nome }}</td><td>R$ {{ '%.2f'|format(c.custo) }}</td>
-          <td>{{ c.tempo }}</td><td>{{ c.rendimento }}%</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
+</details>
+{% endfor %}
 
 <a href="{{ url_for('homepage') }}" class="btn btn-secondary">Nova análise</a>
 {% endblock %}

@@ -1,187 +1,187 @@
 {% extends 'base.html' %}
-{% block title %}Inserção manual - Análise de Viabilidade{% endblock %}
+{% block title %}Análise manual de viabilidade{% endblock %}
+
+{% macro linha_item(i, tipo, item={}) %}
+<tr>
+  <td><input class="form-control form-control-sm" name="c{{ i }}_{{ tipo }}_nome" value="{{ item.get('nome', '') }}" placeholder="Ex.: vendas, economia de energia, materiais"></td>
+  <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_{{ tipo }}_quantidade" value="{{ item.get('quantidade', '') }}" placeholder="Por ano" oninput="recalcularLinha(this.closest('tr'))"></td>
+  <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_{{ tipo }}_unitario" value="{{ item.get('valor_unitario', '') }}" placeholder="Por unidade" oninput="recalcularLinha(this.closest('tr'))"></td>
+  <td><output class="subtotal-item">{{ item.get('valor', '') }}</output></td>
+  <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()" aria-label="Remover item">Remover</button></td>
+</tr>
+{% endmacro %}
+
+{% macro linha_ativo(i, ativo={}) %}
+<tr>
+  <td><input class="form-control form-control-sm" name="c{{ i }}_ativo_nome" value="{{ ativo.get('nome', '') }}" placeholder="Ex.: equipamentos, edifícios"></td>
+  <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_ativo_base" value="{{ ativo.get('base', '') }}" placeholder="Valor depreciável" oninput="recalcularAtivo(this.closest('tr'))"></td>
+  <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_ativo_vida" value="{{ ativo.get('vida_util', '') }}" placeholder="Anos" oninput="recalcularAtivo(this.closest('tr'))"></td>
+  <td><output class="depreciacao-item">—</output></td>
+  <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">Remover</button></td>
+</tr>
+{% endmacro %}
+
+{% macro linha_capital(i, item={}) %}
+<tr>
+  <td><input class="form-control form-control-sm" name="c{{ i }}_capital_nome" value="{{ item.get('nome', '') }}" placeholder="Ex.: equipamentos, construção, implantação"></td>
+  <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_capital_quantidade" value="{{ item.get('quantidade', '') }}" placeholder="Quantidade" oninput="recalcularCapital(this.closest('tr'))"></td>
+  <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_capital_unitario" value="{{ item.get('valor_unitario', '') }}" placeholder="Valor por unidade" oninput="recalcularCapital(this.closest('tr'))"></td>
+  <td><output class="subtotal-capital">—</output></td>
+  <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="const card=this.closest('.projeto'); this.closest('tr').remove(); recalcularTotalCapital(card)">Remover</button></td>
+</tr>
+{% endmacro %}
+
+{% macro bloco_projeto(i, p) %}
+<section class="card mb-4 projeto">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Projeto / cenário</strong>
+    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.projeto').remove()">Remover</button>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Nome do projeto ou cenário</label>
+        <input class="form-control" name="c{{ i }}_nome" value="{{ p.get('nome', '') }}" placeholder="Ex.: implantação do laboratório piloto">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Valor residual no fim (opcional)</label>
+        <input class="form-control" inputmode="decimal" name="c{{ i }}_residual" value="{{ p.get('valor_residual', '') }}" placeholder="0">
+      </div>
+      <div class="col-md-3"><label class="form-label">Investimento inicial calculado</label><output class="form-control bg-light" id="total-capital-{{ i }}">0,00</output></div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
+      <h2 class="h6 mb-0">Itens do investimento inicial</h2>
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarCapital('{{ i }}')">+ adicionar item</button>
+    </div>
+    <p class="form-text">Informe os custos de capital, como equipamentos, instalações, software ou construção. O site soma quantidade × valor unitário. Se já souber o total, use uma linha com quantidade 1. Inclua capital de giro, instalação e partida quando fizerem parte do investimento; o site não presume percentuais universais para esses itens.</p>
+    <div class="table-responsive"><table class="table table-sm align-middle">
+      <thead><tr><th>Descrição</th><th>Quantidade</th><th>Valor por unidade</th><th>Subtotal</th><th></th></tr></thead>
+      <tbody id="capital-{{ i }}">{% for item in p.get('investimentos', [{}]) %}{{ linha_capital(i, item) }}{% endfor %}</tbody>
+    </table></div>
+
+    {% for tipo, titulo, itens in [('beneficio', 'Receitas e benefícios monetizados por ano', p.get('beneficios', [])), ('custo', 'Custos e despesas por ano', p.get('custos', []))] %}
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+      <h2 class="h6 mb-0">{{ titulo }}</h2>
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarItem('{{ i }}', '{{ tipo }}')">+ adicionar item</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead><tr><th>Descrição</th><th>Quantidade por ano</th><th>Valor por unidade</th><th>Subtotal anual</th><th></th></tr></thead>
+        <tbody id="itens-{{ i }}-{{ tipo }}">
+          {% for item in itens %}{{ linha_item(i, tipo, item) }}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+      <h2 class="h6 mb-0">Ativos depreciáveis (opcional)</h2>
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarAtivo('{{ i }}')">+ adicionar ativo</button>
+    </div>
+    <p class="form-text">Use esta seção se informar uma taxa de imposto. A depreciação linear anual será calculada como valor depreciável ÷ vida útil.</p>
+    <div class="table-responsive"><table class="table table-sm align-middle">
+      <thead><tr><th>Ativo</th><th>Base depreciável</th><th>Vida útil (anos)</th><th>Depreciação anual calculada</th><th></th></tr></thead>
+      <tbody id="ativos-{{ i }}">{% for ativo in p.get('ativos_depreciaveis', []) %}{{ linha_ativo(i, ativo) }}{% endfor %}</tbody>
+    </table></div>
+  </div>
+</section>
+{% endmacro %}
+
 {% block content %}
-<h1 class="h3 mb-4">Inserção manual dos dados do projeto</h1>
+<h1 class="h3 mb-2">Análise manual de viabilidade</h1>
+<p class="text-muted">Informe as quantidades e os valores unitários. O site multiplica e soma os itens para calcular receitas/benefícios e custos anuais. Para um valor anual já totalizado, use quantidade 1 e informe esse total como valor unitário.</p>
 
 <form method="post" action="{{ url_for('analise_manual_resultado') }}">
-
   <div class="card mb-4">
-    <div class="card-header">Dados gerais</div>
-    <div class="card-body row g-3">
-      <div class="col-md-6">
-        <label class="form-label">Nome do projeto</label>
-        <input type="text" class="form-control" name="nome_projeto" value="Projeto proposto">
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Tempo (meses)</label>
-        <input type="text" class="form-control" name="tempo">
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Rendimento (%)</label>
-        <input type="text" class="form-control" name="rendimento">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Energia (R$)</label>
-        <input type="text" class="form-control" name="energia" value="0">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Mão de obra (R$)</label>
-        <input type="text" class="form-control" name="mao_obra" value="0">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Outros custos (R$)</label>
-        <input type="text" class="form-control" name="outros" value="0">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Quantidade produzida</label>
-        <input type="text" class="form-control" name="quantidade_produzida" value="1">
-      </div>
-    </div>
-  </div>
-
-  <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      Materiais
-      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('materiais')">+ material</button>
-    </div>
-    <div class="card-body">
-      <table class="table" id="tabela-materiais">
-        <thead><tr><th>Nome</th><th>Quantidade</th><th>Preço unitário (R$)</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><input type="text" class="form-control" name="material_nome"></td>
-            <td><input type="text" class="form-control" name="material_quantidade"></td>
-            <td><input type="text" class="form-control" name="material_preco"></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      Equipamentos
-      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('equipamentos')">+ equipamento</button>
-    </div>
-    <div class="card-body">
-      <table class="table" id="tabela-equipamentos">
-        <thead><tr><th>Nome</th><th>Horas de uso</th><th>Custo por hora (R$)</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><input type="text" class="form-control" name="equipamento_nome"></td>
-            <td><input type="text" class="form-control" name="equipamento_horas"></td>
-            <td><input type="text" class="form-control" name="equipamento_custo_hora"></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      Experimentos (valores repetidos para cálculo estatístico)
-      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('experimentos')">+ valor</button>
-    </div>
-    <div class="card-body">
-      <table class="table" id="tabela-experimentos">
-        <thead><tr><th>Valor obtido</th></tr></thead>
-        <tbody>
-          <tr><td><input type="text" class="form-control" name="experimento_valor"></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card mb-4">
-    <div class="card-header">Análise de investimento</div>
+    <div class="card-header">Premissas da análise</div>
     <div class="card-body row g-3">
       <div class="col-md-4">
-        <label class="form-label">Investimento inicial (R$)</label>
-        <input type="text" class="form-control" name="investimento_inicial" placeholder="Deixe em branco para usar o custo total do projeto">
-        <div class="form-text">Se deixado em branco, o custo total calculado acima é usado como investimento inicial.</div>
+        <label class="form-label">Taxa mínima de atratividade / desconto (%)</label>
+        <input class="form-control" inputmode="decimal" name="taxa_desconto" required>
       </div>
       <div class="col-md-4">
-        <label class="form-label">Taxa mínima de atratividade (% por período)</label>
-        <input type="text" class="form-control" name="taxa_desconto" value="10">
+        <label class="form-label">Horizonte do projeto (anos)</label>
+        <input class="form-control" inputmode="numeric" name="vida_projeto" required>
       </div>
       <div class="col-md-4">
-        <label class="form-label">Valor residual ao final (R$)</label>
-        <input type="text" class="form-control" name="valor_residual" value="0">
+        <label class="form-label">Imposto sobre o lucro (%) — opcional</label>
+        <input class="form-control" inputmode="decimal" name="taxa_imposto" placeholder="Deixe em branco para análise antes dos impostos">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <div class="form-text">Use a mesma moeda e periodicidade em todos os valores. Sem cronograma anual, os valores se repetem por ano.</div>
       </div>
     </div>
   </div>
 
-  <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      Fluxo de caixa esperado (um valor por período: receita ou economia gerada menos custos operacionais daquele período)
-      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('fluxo_caixa')">+ período</button>
-    </div>
-    <div class="card-body">
-      <table class="table" id="tabela-fluxo_caixa">
-        <thead><tr><th>Período</th><th>Fluxo de caixa líquido (R$)</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>1</td>
-            <td><input type="text" class="form-control" name="fluxo_caixa_valor"></td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="form-text">Adicione uma linha para cada período (ex.: cada ano) de vida útil do projeto.</div>
-    </div>
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0">Projetos ou cenários</h2>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarProjeto()">+ adicionar cenário</button>
   </div>
-
-  <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      Alternativas para comparação (opcional)
-      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha('alternativas')">+ alternativa</button>
-    </div>
-    <div class="card-body">
-      <table class="table" id="tabela-alternativas">
-        <thead><tr><th>Nome</th><th>Custo (R$)</th><th>Tempo</th><th>Rendimento (%)</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><input type="text" class="form-control" name="alt_nome"></td>
-            <td><input type="text" class="form-control" name="alt_custo"></td>
-            <td><input type="text" class="form-control" name="alt_tempo"></td>
-            <td><input type="text" class="form-control" name="alt_rendimento"></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <button type="submit" class="btn btn-primary">Calcular viabilidade</button>
+  <div id="projetos">{% for p in cens %}{{ bloco_projeto(loop.index0, p) }}{% endfor %}</div>
+  <button type="submit" class="btn btn-primary btn-lg">Calcular viabilidade</button>
 </form>
 
+<template id="tpl-projeto">{{ bloco_projeto('__I__', {}) }}</template>
+<template id="tpl-linha-beneficio">{{ linha_item('__I__', 'beneficio') }}</template>
+<template id="tpl-linha-custo">{{ linha_item('__I__', 'custo') }}</template>
+<template id="tpl-ativo">{{ linha_ativo('__I__') }}</template>
+<template id="tpl-linha-capital">{{ linha_capital('__I__') }}</template>
 <script>
-function adicionarLinha(tipo) {
-  const tabelas = {
-    materiais: {id: 'tabela-materiais', campos: ['material_nome', 'material_quantidade', 'material_preco']},
-    equipamentos: {id: 'tabela-equipamentos', campos: ['equipamento_nome', 'equipamento_horas', 'equipamento_custo_hora']},
-    experimentos: {id: 'tabela-experimentos', campos: ['experimento_valor']},
-    alternativas: {id: 'tabela-alternativas', campos: ['alt_nome', 'alt_custo', 'alt_tempo', 'alt_rendimento']},
-    fluxo_caixa: {id: 'tabela-fluxo_caixa', campos: ['fluxo_caixa_valor'], comPeriodo: true},
-  };
-  const config = tabelas[tipo];
-  const tbody = document.querySelector('#' + config.id + ' tbody');
-  const linha = document.createElement('tr');
-
-  if (config.comPeriodo) {
-    const tdPeriodo = document.createElement('td');
-    tdPeriodo.textContent = tbody.querySelectorAll('tr').length + 1;
-    linha.appendChild(tdPeriodo);
+let proximoProjeto = {{ cens|length }};
+function adicionarProjeto() {
+  const html = document.getElementById('tpl-projeto').innerHTML.replaceAll('__I__', proximoProjeto);
+  proximoProjeto++;
+  document.getElementById('projetos').insertAdjacentHTML('beforeend', html);
+}
+function adicionarItem(indice, tipo) {
+  const html = document.getElementById('tpl-linha-' + tipo).innerHTML.replaceAll('__I__', indice);
+  document.getElementById('itens-' + indice + '-' + tipo).insertAdjacentHTML('beforeend', html);
+}
+function adicionarAtivo(indice) {
+  const html = document.getElementById('tpl-ativo').innerHTML.replaceAll('__I__', indice);
+  document.getElementById('ativos-' + indice).insertAdjacentHTML('beforeend', html);
+}
+function adicionarCapital(indice) {
+  const html = document.getElementById('tpl-linha-capital').innerHTML.replaceAll('__I__', indice);
+  document.getElementById('capital-' + indice).insertAdjacentHTML('beforeend', html);
+}
+function numeroLocal(valor) {
+  let texto = (valor || '').trim().replace(/\s/g, '');
+  if (texto.includes(',') && texto.includes('.')) {
+    texto = texto.lastIndexOf(',') > texto.lastIndexOf('.')
+      ? texto.replace(/\./g, '').replace(',', '.')
+      : texto.replace(/,/g, '');
+  } else {
+    texto = texto.replace(',', '.');
   }
-
-  config.campos.forEach(campo => {
-    const td = document.createElement('td');
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.name = campo;
-    input.className = 'form-control';
-    td.appendChild(input);
-    linha.appendChild(td);
-  });
-  tbody.appendChild(linha);
+  const n = Number(texto);
+  return Number.isFinite(n) ? n : 0;
+}
+function recalcularLinha(linha) {
+  const campos = linha.querySelectorAll('input');
+  const quantidade = numeroLocal(campos[1].value);
+  const unitario = numeroLocal(campos[2].value);
+  linha.querySelector('.subtotal-item').textContent = (quantidade * unitario).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+function recalcularAtivo(linha) {
+  const campos = linha.querySelectorAll('input');
+  const base = numeroLocal(campos[1].value);
+  const vida = numeroLocal(campos[2].value);
+  linha.querySelector('.depreciacao-item').textContent = vida > 0
+    ? (base / vida).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+    : '—';
+}
+function recalcularCapital(linha) {
+  const campos = linha.querySelectorAll('input');
+  const total = numeroLocal(campos[1].value) * numeroLocal(campos[2].value);
+  linha.querySelector('.subtotal-capital').textContent = total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  recalcularTotalCapital(linha.closest('.projeto'));
+}
+function recalcularTotalCapital(card) {
+  const total = [...card.querySelectorAll('.subtotal-capital')]
+    .reduce((soma, celula) => soma + numeroLocal(celula.textContent), 0);
+  card.querySelector('[id^="total-capital-"]').textContent = total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 </script>
 {% endblock %}

@@ -10,7 +10,15 @@ def numero(valor):
         if isinstance(valor, (int, float)):
             return float(valor)
 
-        valor = str(valor).replace(",", ".")
+        valor = str(valor).strip().replace(" ", "")
+        if "," in valor and "." in valor:
+            # Interpreta 1.234,56 (pt-BR) e 1,234.56 (en-US).
+            if valor.rfind(",") > valor.rfind("."):
+                valor = valor.replace(".", "").replace(",", ".")
+            else:
+                valor = valor.replace(",", "")
+        else:
+            valor = valor.replace(",", ".")
         return float(valor)
 
     except (ValueError, TypeError):
