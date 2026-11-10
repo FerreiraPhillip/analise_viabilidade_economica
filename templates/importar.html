@@ -13,10 +13,12 @@
   </ul>
 </div>
 
+<div class="card"><div class="card-body">
 <form method="post" action="{{ url_for('importar_planilha_resultado') }}" enctype="multipart/form-data">
   <div class="mb-3">
     <input class="form-control" type="file" name="planilha" accept=".xlsx">
   </div>
-  <button type="submit" class="btn btn-primary">Enviar e calcular</button>
+  <button type="submit" class="btn btn-primary btn-lg">Enviar e calcular</button>
 </form>
+</div></div>
 {% endblock %}

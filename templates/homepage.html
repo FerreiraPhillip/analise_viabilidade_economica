@@ -1,14 +1,21 @@
 {% extends 'base.html' %}
 {% block title %}Análise de Viabilidade Econômica{% endblock %}
 {% block content %}
-<div class="p-5 bg-white rounded-3 shadow-sm">
+<section class="hero mb-4">
+  <span class="eyebrow">Ferramenta acadêmica</span>
   <h1 class="mb-3">Análise de Viabilidade Econômica de Projetos Acadêmicos</h1>
   <p class="lead">
     Analise projetos de diferentes áreas com investimento inicial, receitas ou benefícios, custos, horizonte e taxa de desconto. Digite os dados ou envie uma planilha com esses valores identificados; compare cenários e veja VPL, TIR, payback e o resultado de viabilidade.
   </p>
-  <div class="d-flex gap-3 mt-4">
+  <div class="d-flex flex-wrap gap-3 mt-4">
     <a href="{{ url_for('analise_manual') }}" class="btn btn-primary btn-lg">Inserir dados manualmente</a>
-    <a href="{{ url_for('importar_planilha') }}" class="btn btn-outline-primary btn-lg">Importar planilha Excel</a>
+    <a href="{{ url_for('importar_planilha') }}" class="btn btn-lg btn-light-outline">Importar planilha Excel</a>
   </div>
+</section>
+
+<div class="row g-3">
+  <div class="col-md-4"><div class="feature"><div class="ico">1</div><h2 class="h6">Informe os dados</h2><p class="text-muted small mb-0">Digite investimento, receitas, custos e premissas, ou envie sua planilha .xlsx.</p></div></div>
+  <div class="col-md-4"><div class="feature"><div class="ico">2</div><h2 class="h6">Compare cenários</h2><p class="text-muted small mb-0">Avalie várias alternativas lado a lado com os mesmos critérios.</p></div></div>
+  <div class="col-md-4"><div class="feature"><div class="ico">3</div><h2 class="h6">Veja o resultado</h2><p class="text-muted small mb-0">VPL, TIR, payback simples e descontado, e um parecer claro de viabilidade.</p></div></div>
 </div>
 {% endblock %}
