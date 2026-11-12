@@ -332,14 +332,47 @@ def payback_descontado(investimento_inicial, fluxos_caixa, taxa):
     return None
 
 
-def analisar_viabilidade_investimento(investimento_inicial, fluxos_caixa, taxa, valor_residual=0):
+def aplicar_cronograma_investimento(investimento_total, fluxos_operacionais, cronograma=None):
+    """
+    Distribui o investimento em mais de um ano de implantação.
+
+    cronograma = fração do investimento paga no ano 0, no ano 1, ... (ex.: [0.7, 0.3]).
+    A operação só começa depois do último desembolso, então os desembolsos dos anos
+    1, 2, ... entram como fluxos negativos ANTES dos fluxos operacionais.
+
+    Retorna (investimento_no_ano_0, fluxos_completos, qtd_anos_de_implantacao_apos_o_ano_0).
+    Sem cronograma, devolve o investimento inteiro no ano 0 (comportamento original).
+    """
+    investimento_total = numero(investimento_total)
+    fluxos = [numero(f) for f in fluxos_operacionais]
+
+    if not cronograma or len(cronograma) < 2:
+        return investimento_total, fluxos, 0
+
+    fracoes = [max(numero(x), 0.0) for x in cronograma]
+    soma = sum(fracoes)
+    if soma <= 0:
+        return investimento_total, fluxos, 0
+
+    fracoes = [x / soma for x in fracoes]
+    anteriores = [-investimento_total * x for x in fracoes[1:]]
+    return investimento_total * fracoes[0], anteriores + fluxos, len(anteriores)
+
+
+def analisar_viabilidade_investimento(investimento_inicial, fluxos_caixa, taxa, valor_residual=0,
+                                      cronograma_investimento=None):
     """
     Reúne VP, VF, VPL, TIR e Payback num único resultado e emite o veredito
     de viabilidade econômica do investimento, com os motivos da decisão.
     """
-    investimento_inicial = numero(investimento_inicial)
+    investimento_total = numero(investimento_inicial)
     taxa_num = numero(taxa)
     valor_residual = numero(valor_residual)
+
+    # Sem cronograma: investimento_inicial == investimento_total e fluxos_caixa não mudam.
+    investimento_inicial, fluxos_caixa, anos_previos = aplicar_cronograma_investimento(
+        investimento_total, fluxos_caixa, cronograma_investimento
+    )
     n = len(fluxos_caixa)
 
     vp_fluxos = sum(
@@ -347,7 +380,11 @@ def analisar_viabilidade_investimento(investimento_inicial, fluxos_caixa, taxa, 
         for periodo, fluxo in enumerate(fluxos_caixa, start=1)
     )
     vp_residual = valor_presente(valor_residual, taxa_num, n) if (valor_residual and n > 0) else 0
-    vf_investimento = valor_futuro(investimento_inicial, taxa_num, n) if n > 0 else 0
+    vf_investimento = 0
+    if n > 0:
+        vf_investimento = valor_futuro(investimento_inicial, taxa_num, n)
+        for ano, fluxo in enumerate(fluxos_caixa[:anos_previos], start=1):
+            vf_investimento += valor_futuro(-fluxo, taxa_num, n - ano)
 
     vpl = valor_presente_liquido(investimento_inicial, fluxos_caixa, taxa_num, valor_residual)
     tir = taxa_interna_retorno(investimento_inicial, fluxos_caixa, valor_residual)
@@ -357,11 +394,11 @@ def analisar_viabilidade_investimento(investimento_inicial, fluxos_caixa, taxa, 
     vpl_positivo = vpl > 0
     tir_acima_da_taxa = (tir is not None) and (tir > taxa_num)
 
-    viavel = bool(investimento_inicial > 0 and vpl_positivo and tir_acima_da_taxa)
+    viavel = bool(investimento_total > 0 and vpl_positivo and tir_acima_da_taxa)
 
     motivos = []
 
-    if investimento_inicial <= 0:
+    if investimento_total <= 0:
         motivos.append("não há um valor de investimento inicial válido para ser analisado")
     else:
         if vpl_positivo:
@@ -403,7 +440,7 @@ def analisar_viabilidade_investimento(investimento_inicial, fluxos_caixa, taxa, 
             )
 
     return {
-        "investimento_inicial": investimento_inicial,
+        "investimento_inicial": investimento_total,
         "taxa_desconto": taxa_num,
         "valor_residual": valor_residual,
         "numero_periodos": n,

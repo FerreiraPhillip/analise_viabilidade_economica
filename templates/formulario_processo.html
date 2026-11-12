@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}Análise manual — processo industrial{% endblock %}
+
+{% macro campo(prefixo, chave, rotulo, unidade, valor, obrigatorio=False) %}
+<div class="col-md-6 col-lg-4">
+  <label class="form-label">{{ rotulo }}{% if obrigatorio %} <span class="text-danger">*</span>{% endif %}</label>
+  <div class="input-group">
+    <input class="form-control" inputmode="decimal" name="{{ prefixo }}{{ chave }}" value="{{ valor }}" {% if obrigatorio %}required{% endif %}>
+    <span class="input-group-text small">{{ unidade }}</span>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro linha_eq(i, e={}) %}
+<tr>
+  {% for chave, rotulo, tipo in equip %}
+  <td>
+    {% if tipo == 'select' %}
+    <select class="form-select form-select-sm" name="c{{ i }}_eq_{{ chave }}">
+      <option value="não" {{ 'selected' if (e.get(chave, 'não') != 'sim') }}>não</option>
+      <option value="sim" {{ 'selected' if e.get(chave) == 'sim' }}>sim</option>
+    </select>
+    {% else %}
+    <input class="form-control form-control-sm" {% if tipo == 'number' %}inputmode="decimal"{% endif %} name="c{{ i }}_eq_{{ chave }}" value="{{ e.get(chave, '') }}" style="min-width:{{ '9rem' if tipo == 'text' else '6rem' }}">
+    {% endif %}
+  </td>
+  {% endfor %}
+  <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">Remover</button></td>
+</tr>
+{% endmacro %}
+
+{% macro bloco_cenario(i, c) %}
+<section class="card mb-4 projeto">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Cenário / rota de processo</strong>
+    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.projeto').remove()">Remover</button>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Nome do cenário</label>
+      <input class="form-control" name="c{{ i }}_nome" value="{{ c.get('nome', '') }}" placeholder="Ex.: Extração com etanol">
+    </div>
+    {% for titulo, campos in cen_grupos %}
+    <h2 class="h6 mt-3">{{ titulo }}</h2>
+    <div class="row g-3">
+      {% for chave, rotulo, unidade in campos %}{{ campo('c' ~ i ~ '_', chave, rotulo, unidade, c.get(chave, '')) }}{% endfor %}
+    </div>
+    {% endfor %}
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+      <h2 class="h6 mb-0">Equipamentos</h2>
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarEquip('{{ i }}')">+ adicionar equipamento</button>
+    </div>
+    <p class="form-text">Só o que foi cotado/medido. O site calcula o ajuste pelo CEPCI, o custo total, o consumo elétrico somado e todo o investimento (instalação, tubulação, edificações, capital de giro...).</p>
+    <div class="table-responsive"><table class="table table-sm align-middle">
+      <thead><tr>{% for chave, rotulo, tipo in equip %}<th>{{ rotulo }}</th>{% endfor %}<th></th></tr></thead>
+      <tbody id="eq-{{ i }}">{% for e in c.get('equipamentos', [{}]) %}{{ linha_eq(i, e) }}{% endfor %}</tbody>
+    </table></div>
+  </div>
+</section>
+{% endmacro %}
+
+{% block content %}
+<h1 class="h3 mb-2">Análise manual — processo industrial</h1>
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('analise_manual') }}">Projeto geral</a></li>
+  <li class="nav-item"><a class="nav-link active" href="{{ url_for('analise_manual_processo') }}">Processo industrial (equipamentos e insumos)</a></li>
+</ul>
+<p class="text-muted">Informe apenas o que se digita na planilha EVTE: quantidades, preços, equipamentos e critérios financeiros. O site calcula sozinho a razão CEPCI, o custo dos equipamentos, rendimentos, consumo elétrico, o investimento total (método dos fatores), cada linha de custo, depreciação, imposto, fluxo de caixa, VPL, TIR e payback.
+  <a href="{{ url_for('analise_manual_processo', exemplo=1) }}">Carregar exemplo</a>.</p>
+
+<form method="post" action="{{ url_for('analise_manual_processo_resultado') }}">
+  {% for titulo, campos in grupos if titulo not in avancados %}
+  <div class="card mb-4">
+    <div class="card-header">{{ titulo }}</div>
+    <div class="card-body row g-3">
+      {% for chave, rotulo, unidade in campos %}{{ campo('g_', chave, rotulo, unidade, g.get(chave, ''), chave in obrigatorios) }}{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  {% for titulo, campos in grupos if titulo in avancados %}
+  <details class="card mb-4">
+    <summary class="card-header" style="cursor:pointer">{{ titulo }} <span class="text-muted small fw-normal">— já preenchido com valores-padrão; só altere se precisar</span></summary>
+    <div class="card-body row g-3">
+      {% for chave, rotulo, unidade in campos %}{{ campo('g_', chave, rotulo, unidade, g.get(chave, '')) }}{% endfor %}
+    </div>
+  </details>
+  {% endfor %}
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h5 mb-0">Cenários</h2>
+    <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarCenario()">+ adicionar cenário</button>
+  </div>
+  <div id="projetos">{% for c in cens %}{{ bloco_cenario(loop.index0, c) }}{% endfor %}</div>
+  <button type="submit" class="btn btn-primary btn-lg">Calcular viabilidade</button>
+</form>
+
+<template id="tpl-cenario">{{ bloco_cenario('__I__', {}) }}</template>
+<template id="tpl-eq">{{ linha_eq('__I__', {}) }}</template>
+<script>
+let proximoCenario = {{ cens|length }};
+function adicionarCenario() {
+  const html = document.getElementById('tpl-cenario').innerHTML.replaceAll('__I__', proximoCenario);
+  proximoCenario++;
+  document.getElementById('projetos').insertAdjacentHTML('beforeend', html);
+}
+function adicionarEquip(i) {
+  document.getElementById('eq-' + i).insertAdjacentHTML('beforeend',
+    document.getElementById('tpl-eq').innerHTML.replaceAll('__I__', i));
+}
+</script>
+{% endblock %}

@@ -60,30 +60,75 @@ def _alias_key(text):
         for alias in sorted(aliases, key=len, reverse=True):
             if normalized == _norm(alias):
                 return key
+    melhor, tamanho = None, 0
     for key, aliases in ALIASES.items():
-        for alias in sorted(aliases, key=len, reverse=True):
+        for alias in aliases:
             normalized_alias = _norm(alias)
-            if len(normalized_alias) > 5 and normalized_alias in normalized:
-                return key
-    return None
+            if len(normalized_alias) > 5 and normalized_alias in normalized and len(normalized_alias) > tamanho:
+                melhor, tamanho = key, len(normalized_alias)
+    return melhor
 
 
 def _has_any(text, phrases):
     return any(_norm(phrase) in text for phrase in phrases)
 
 
-def _legacy_result(arquivo):
+def _formulas_sem_valor(arquivo):
+    """True se há células com fórmula cujo resultado não foi salvo no arquivo."""
+    try:
+        formulas = load_workbook(arquivo, data_only=False, read_only=True)
+        arquivo.seek(0)
+        valores = load_workbook(arquivo, data_only=True, read_only=True)
+        for ws in formulas.worksheets:
+            wv = valores[ws.title]
+            for linha_f, linha_v in zip(ws.iter_rows(), wv.iter_rows()):
+                for cf, cv in zip(linha_f, linha_v):
+                    if isinstance(cf.value, str) and cf.value.startswith("=") and cv.value is None:
+                        return True
+    except Exception:
+        return False
+    return False
+
+
+def _legacy_result(arquivo, modo_evte="formulas"):
     """Converte os formatos já aceitos pelo site para a saída genérica."""
     arquivo.seek(0)
-    globais, cenarios = ler_planilha_tea(arquivo)
+    globais, cenarios = ler_planilha_tea(arquivo, modo_evte)
     arquivo.seek(0)
-    return converter_resultado_tea(analisar_tea(globais, cenarios))
+    conferencia = globais.pop("_conferencia", None)
+    resultado = converter_resultado_tea(analisar_tea(globais, cenarios))
+    if conferencia:
+        resultado["conferencia"] = _montar_conferencia(conferencia, resultado)
+    return resultado
 
 
-def ler_planilha_generica(arquivo):
+def _montar_conferencia(conf, resultado):
+    """Compara o resultado do site com o do Excel e com o cálculo pela tabela de premissas."""
+    outro = "premissas" if conf["modo"] == "formulas" else "formulas"
+    g_alt, c_alt = conf[outro]
+    alt = converter_resultado_tea(analisar_tea(dict(g_alt), c_alt))
+    linhas = []
+    for i, c in enumerate(resultado["cenarios"]):
+        excel = conf["excel"][i] if i < len(conf["excel"]) else {}
+        v, va = c["viabilidade"], alt["cenarios"][i]["viabilidade"]
+        linhas.append({
+            "nome": c["nome"],
+            "excel_vpl": excel.get("vpl"), "excel_tir": excel.get("tir"), "excel_payback": excel.get("payback"),
+            "site_vpl": v["vpl"], "site_tir": v["tir"], "site_viavel": v["viavel"],
+            "alt_vpl": va["vpl"], "alt_tir": va["tir"], "alt_viavel": va["viavel"],
+        })
+    return {
+        "modo": conf["modo"],
+        "modo_alternativo": outro,
+        "linhas": linhas,
+        "divergencias": conf["divergencias"],
+    }
+
+
+def ler_planilha_generica(arquivo, modo_evte="formulas"):
     """Lê a planilha do site, a planilha EVTE ou tabelas financeiras rotuladas."""
     try:
-        return _legacy_result(arquivo)
+        return _legacy_result(arquivo, modo_evte)
     except (ValueError, KeyError, TypeError, AttributeError):
         arquivo.seek(0)
 
@@ -126,8 +171,11 @@ def ler_planilha_generica(arquivo):
             if not cells:
                 continue
             # Lê pares rótulo/valor em qualquer aba, sem depender do nome da aba.
+            valor_consumido_ate = -1  # o valor de um rótulo não pode ser lido como outro rótulo
             for i, cell in enumerate(cells):
-                if not isinstance(cell, str):
+                if i <= valor_consumido_ate or not isinstance(cell, str):
+                    continue
+                if len(_norm(cell).split()) > 10:  # rótulos são curtos; textos longos são observações
                     continue
                 key = _alias_key(cell)
                 if not key:
@@ -145,11 +193,13 @@ def ler_planilha_generica(arquivo):
                                     parsed_scenario *= 100
                                 inputs_by_scenario[scenario_name][key] = parsed_scenario
                 if key == "project":
-                    value = next((x for x in cells[i + 1:] if x is not None and str(x).strip()), None)
+                    pos = next((j for j in range(i + 1, len(cells)) if cells[j] is not None and str(cells[j]).strip()), None)
                 else:
-                    value = next((x for x in cells[i + 1:] if _number(x) is not None), None)
-                if value is None:
+                    pos = next((j for j in range(i + 1, len(cells)) if _number(cells[j]) is not None), None)
+                if pos is None:
                     continue
+                value = cells[pos]
+                valor_consumido_ate = pos
                 if key == "project":
                     assumptions[key] = str(value).strip()
                     detected_rows += 1
@@ -207,19 +257,25 @@ def ler_planilha_generica(arquivo):
         costs = list(line_items[name]["custos"] or line_items["Projeto"]["custos"])
         benefit = scenario_inputs.get("benefit", assumptions["benefit"])
         cost = scenario_inputs.get("cost", assumptions["cost"])
-        if not benefits and benefit is not None:
+        # Valor digitado na coluna do próprio cenário vale mais que a lista de itens compartilhada.
+        if "benefit" in scenario_inputs or (not benefits and benefit is not None):
             benefits = [{"nome": "Receitas e benefícios anuais", "valor": benefit}]
-        if not costs and cost is not None:
+        if "cost" in scenario_inputs or (not costs and cost is not None):
             costs = [{"nome": "Custos e despesas anuais", "valor": cost}]
+        project_years = scenario_inputs.get("horizon", assumptions["horizon"])
         if flows:
             last_year = max(flows)
             cash_flows = [flows.get(year, 0.0) for year in range(1, last_year + 1)]
         else:
-            project_years = scenario_inputs.get("horizon", assumptions["horizon"])
-            annual_net = sum(_number(item["valor"]) or 0 for item in benefits) - sum(_number(item["valor"]) or 0 for item in costs)
-            cash_flows = [annual_net] * max(0, int(round(project_years))) if project_years else None
+            # Sem tabela de fluxo: o site monta o fluxo (e aplica imposto/depreciação) a partir de
+            # receitas, custos e horizonte. Antes o fluxo já saía pronto e o imposto lido era ignorado.
+            cash_flows = None
+        nome_cenario = scenario_inputs.get("project")
+        if not nome_cenario:
+            nome_cenario = assumptions["project"] if (len(names) == 1 and assumptions["project"] not in (None, "Projeto")) else name
         cenarios.append({
-            "nome": str(scenario_inputs.get("project", name)),
+            "nome": str(nome_cenario),
+            "anos": int(round(project_years)) if project_years else None,
             "investimento_inicial": scenario_inputs.get("investment", assumptions["investment"]),
             "valor_residual": scenario_inputs.get("residual", assumptions["residual"]) or 0,
             "beneficios": benefits,
@@ -239,6 +295,12 @@ def ler_planilha_generica(arquivo):
     if not has_annual_values and not has_flows:
         missing.append("receitas/benefícios e custos anuais, ou uma tabela de fluxo de caixa líquido")
     if missing or detected_rows == 0:
+        arquivo.seek(0)
+        if _formulas_sem_valor(arquivo):
+            raise ValueError(
+                "Esta planilha tem fórmulas sem valor calculado salvo (provavelmente foi gerada por um programa). "
+                "Abra no Excel, salve o arquivo e envie novamente."
+            )
         detail = ", ".join(missing) if missing else "dados reconhecíveis"
         raise ValueError(
             "Não consegui identificar todos os dados necessários nesta planilha: " + detail + ". "

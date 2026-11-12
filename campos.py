@@ -31,7 +31,8 @@ GLOBAIS_GRUPOS = [
         ("marr", "Taxa mínima de atratividade (MARR)", "% a.a."),
         ("wacc", "Custo médio ponderado de capital (WACC)", "% a.a."),
         ("valor_residual_pct", "Valor residual (% do custo das edificações)", "%"),
-        ("vida_projeto", "Vida útil do projeto", "anos"),
+        ("vida_projeto", "Vida útil do projeto (anos de operação)", "anos"),
+        ("invest_ano0_pct", "Parcela do investimento paga no ano 0 (o restante vai para o ano 1, antes da operação; em branco = 100%)", "%"),
     ]),
     ("Critérios de custo (percentuais)", [
         ("manutencao", "Manutenção e reparos", "% do capital fixo (FCI)"),
@@ -48,7 +49,29 @@ GLOBAIS_GRUPOS = [
         ("vendas", "Despesas de vendas e distribuição", "% da receita"),
         ("pd", "Pesquisa e desenvolvimento", "% da receita"),
     ]),
+    ("Fatores de investimento (usados só quando o FCI não é informado)", [
+        ("capex_instalacao", "Instalação dos equipamentos", "% do custo dos equipamentos"),
+        ("capex_instrumentacao", "Instrumentação", "% do custo dos equipamentos"),
+        ("capex_tubulacao", "Tubulações", "% do custo dos equipamentos"),
+        ("capex_eletrica", "Instalação elétrica", "% do custo dos equipamentos"),
+        ("capex_terreno", "Terreno", "% do custo dos equipamentos"),
+        ("capex_escritorio", "Escritório, mobiliário e instalações de serviço", "% do custo dos equipamentos"),
+        ("capex_edificacoes", "Edificações (com serviços)", "% do custo dos equipamentos"),
+        ("capex_engenharia", "Engenharia e supervisão", "% do custo dos equipamentos"),
+        ("capex_construcao", "Despesas de construção", "% do custo dos equipamentos"),
+        ("capex_juridico", "Despesas legais", "% do custo dos equipamentos"),
+        ("capex_empreiteiro", "Taxa do empreiteiro", "% do custo dos equipamentos"),
+        ("capex_contingencia", "Contingência de capital", "% do custo dos equipamentos"),
+        ("capex_capital_giro", "Capital de giro", "% do FCI"),
+        ("capex_partida", "Partida (start-up)", "% do FCI"),
+    ]),
 ]
+
+# Grupos que já vêm preenchidos com valores-padrão no formulário manual (o usuário só mexe se quiser).
+GRUPOS_AVANCADOS = (
+    "Critérios de custo (percentuais)",
+    "Fatores de investimento (usados só quando o FCI não é informado)",
+)
 
 CENARIO_GRUPOS = [
     ("Operação", [
@@ -69,7 +92,7 @@ CENARIO_GRUPOS = [
         ("agua", "Água", "t/ano"),
         ("residuos", "Descarte de resíduos", "t/ano"),
     ]),
-    ("Investimento (opcional no preenchimento manual)", [
+    ("Investimento (opcional — em branco, o site calcula pelos fatores de investimento)", [
         ("fci", "Investimento de capital fixo — FCI", "US$"),
         ("investimento_inicial", "Investimento total inicial — TCI (inclui capital de giro e partida)", "US$"),
         ("edificacoes", "Custo das edificações", "US$"),
@@ -102,6 +125,11 @@ EXEMPLO_GLOBAIS = {
     "manutencao": 6, "suprimentos": 10, "laboratorio": 10, "patentes": 2, "contingencia": 9,
     "impostos_locais": 2, "seguro": 1, "embalagem": 6, "mao_obra_indireta": 40,
     "armazenagem": 3.5, "administrativas": 8, "vendas": 10, "pd": 2,
+    # Fatores da aba Capital Investment da planilha EVTE (bloco do cenário 1) e 15%/5% do bloco do cenário 2
+    "capex_instalacao": 20, "capex_instrumentacao": 8, "capex_tubulacao": 10, "capex_eletrica": 8,
+    "capex_terreno": 5, "capex_escritorio": 22, "capex_edificacoes": 10,
+    "capex_engenharia": 11, "capex_construcao": 11, "capex_juridico": 6, "capex_empreiteiro": 6,
+    "capex_contingencia": 12, "capex_capital_giro": 15, "capex_partida": 5,
 }
 
 EXEMPLO_CENARIOS = [

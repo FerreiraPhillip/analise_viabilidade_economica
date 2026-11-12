@@ -26,6 +26,7 @@
   <td><input class="form-control form-control-sm" name="c{{ i }}_capital_nome" value="{{ item.get('nome', '') }}" placeholder="Ex.: equipamentos, construção, implantação"></td>
   <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_capital_quantidade" value="{{ item.get('quantidade', '') }}" placeholder="Quantidade" oninput="recalcularCapital(this.closest('tr'))"></td>
   <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_capital_unitario" value="{{ item.get('valor_unitario', '') }}" placeholder="Valor por unidade" oninput="recalcularCapital(this.closest('tr'))"></td>
+  <td><input class="form-control form-control-sm" inputmode="decimal" name="c{{ i }}_capital_vida" value="{{ item.get('vida_util', '') }}" placeholder="Anos (opcional)"></td>
   <td><output class="subtotal-capital">—</output></td>
   <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="const card=this.closest('.projeto'); this.closest('tr').remove(); recalcularTotalCapital(card)">Remover</button></td>
 </tr>
@@ -54,9 +55,9 @@
       <h2 class="h6 mb-0">Itens do investimento inicial</h2>
       <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarCapital('{{ i }}')">+ adicionar item</button>
     </div>
-    <p class="form-text">Informe os custos de capital, como equipamentos, instalações, software ou construção. O site soma quantidade × valor unitário. Se já souber o total, use uma linha com quantidade 1. Inclua capital de giro, instalação e partida quando fizerem parte do investimento; o site não presume percentuais universais para esses itens.</p>
+    <p class="form-text">Informe os custos de capital, como equipamentos, instalações, software ou construção. O site soma quantidade × valor unitário. Se já souber o total, use uma linha com quantidade 1. Inclua capital de giro, instalação e partida quando fizerem parte do investimento; o site não presume percentuais universais para esses itens. Se informar a vida útil de um item, o site calcula a depreciação dele sozinho (não precisa repetir na seção de ativos depreciáveis). Para projetos industriais, use a aba “Processo industrial” acima: lá o investimento é estimado pelos equipamentos.</p>
     <div class="table-responsive"><table class="table table-sm align-middle">
-      <thead><tr><th>Descrição</th><th>Quantidade</th><th>Valor por unidade</th><th>Subtotal</th><th></th></tr></thead>
+      <thead><tr><th>Descrição</th><th>Quantidade</th><th>Valor por unidade</th><th>Vida útil p/ depreciar</th><th>Subtotal</th><th></th></tr></thead>
       <tbody id="capital-{{ i }}">{% for item in p.get('investimentos', [{}]) %}{{ linha_capital(i, item) }}{% endfor %}</tbody>
     </table></div>
 
@@ -79,7 +80,7 @@
       <h2 class="h6 mb-0">Ativos depreciáveis (opcional)</h2>
       <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarAtivo('{{ i }}')">+ adicionar ativo</button>
     </div>
-    <p class="form-text">Use esta seção se informar uma taxa de imposto. A depreciação linear anual será calculada como valor depreciável ÷ vida útil.</p>
+    <p class="form-text">Use esta seção se informar uma taxa de imposto e houver ativos que não estão na tabela de investimento (os itens de investimento com vida útil já são depreciados automaticamente). A depreciação linear anual é valor depreciável ÷ vida útil.</p>
     <div class="table-responsive"><table class="table table-sm align-middle">
       <thead><tr><th>Ativo</th><th>Base depreciável</th><th>Vida útil (anos)</th><th>Depreciação anual calculada</th><th></th></tr></thead>
       <tbody id="ativos-{{ i }}">{% for ativo in p.get('ativos_depreciaveis', []) %}{{ linha_ativo(i, ativo) }}{% endfor %}</tbody>
@@ -90,6 +91,10 @@
 
 {% block content %}
 <h1 class="h3 mb-2">Análise manual de viabilidade</h1>
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><a class="nav-link active" href="{{ url_for('analise_manual') }}">Projeto geral</a></li>
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('analise_manual_processo') }}">Processo industrial (equipamentos e insumos)</a></li>
+</ul>
 <p class="text-muted">Informe as quantidades e os valores unitários. O site multiplica e soma os itens para calcular receitas/benefícios e custos anuais. Para um valor anual já totalizado, use quantidade 1 e informe esse total como valor unitário.</p>
 
 <form method="post" action="{{ url_for('analise_manual_resultado') }}">

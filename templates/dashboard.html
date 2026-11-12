@@ -1,0 +1,288 @@
+<section class="card mb-4" id="dash">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span>Dashboard interativo</span>
+    <span class="text-muted small fw-normal">Mexa nos controles para ver como o resultado muda — nada aqui altera os dados enviados.</span>
+  </div>
+  <div class="card-body">
+    <div id="dash-comparar" class="mb-4" hidden>
+      <h2 class="h6">Comparação entre cenários (VPL)</h2>
+      <div style="position:relative;height:220px"><canvas id="ch-comp"></canvas></div>
+    </div>
+
+    <ul class="nav nav-pills mb-3" id="dash-abas"></ul>
+    <div id="dash-veredito" class="alert mb-3"></div>
+    <div class="row g-3 mb-3" id="dash-kpis"></div>
+
+    <div class="border rounded-3 p-3 mb-4" style="background:#fbfcfe">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h6 mb-0">E se...? (simulador)</h2>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="dash-reset">Voltar aos valores originais</button>
+      </div>
+      <div class="row g-3" id="dash-sliders"></div>
+      <div class="small text-muted mt-2" id="dash-simnota"></div>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <h2 class="h6 mb-0">Fluxo de caixa acumulado</h2>
+        <p class="small text-muted mb-2">Onde a linha cruza o zero é o payback: o momento em que o projeto devolve o que foi investido. A linha descontada considera o valor do dinheiro no tempo.</p>
+        <div style="position:relative;height:280px"><canvas id="ch-acum"></canvas></div>
+      </div>
+      <div class="col-lg-6">
+        <h2 class="h6 mb-0">Fluxo de caixa de cada ano</h2>
+        <p class="small text-muted mb-2">Barras negativas são desembolsos de investimento; positivas, o dinheiro que o projeto gera por ano.</p>
+        <div style="position:relative;height:280px"><canvas id="ch-anual"></canvas></div>
+      </div>
+      <div class="col-lg-6">
+        <h2 class="h6 mb-0">VPL conforme a taxa de desconto</h2>
+        <p class="small text-muted mb-2">O ponto em que a curva cruza o zero é a TIR. Enquanto a taxa mínima exigida (MARR) estiver à esquerda desse ponto, o VPL é positivo.</p>
+        <div style="position:relative;height:280px"><canvas id="ch-curva"></canvas></div>
+      </div>
+      <div class="col-lg-6">
+        <div class="d-flex justify-content-between align-items-center">
+          <h2 class="h6 mb-0">O que mais pesa no VPL (sensibilidade)</h2>
+          <select class="form-select form-select-sm w-auto" id="dash-var" aria-label="Variação">
+            <option value="10">± 10%</option><option value="20" selected>± 20%</option><option value="30">± 30%</option>
+          </select>
+        </div>
+        <p class="small text-muted mb-2">Quanto o VPL muda se cada item variar para menos ou para mais. Barras maiores = itens que mais precisam de atenção.</p>
+        <div style="position:relative;height:280px"><canvas id="ch-torn"></canvas></div>
+      </div>
+      <div class="col-lg-6" id="dash-custos-col">
+        <h2 class="h6 mb-0">Para onde vai o custo anual</h2>
+        <p class="small text-muted mb-2">Composição dos custos e despesas de um ano de operação.</p>
+        <div style="position:relative;height:280px"><canvas id="ch-custos"></canvas></div>
+      </div>
+      <div class="col-lg-6">
+        <h2 class="h6">Margem de segurança</h2>
+        <p class="small text-muted mb-2">Até onde cada fator pode piorar antes do VPL chegar a zero (mantendo os demais iguais).</p>
+        <div id="dash-margens"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  const D = {{ dash|tojson }};
+  const fmt = (v, c = 0) => (v === null || v === undefined || !isFinite(v)) ? '—'
+    : v.toLocaleString('pt-BR', {minimumFractionDigits: c, maximumFractionDigits: c});
+  const pct = v => v === null || v === undefined ? 'não calculável' : fmt(v, 2) + '%';
+  const anos = v => v === null || v === undefined ? 'não se paga no prazo' : fmt(v, 2) + ' anos';
+  const COR = {ok: '#0f6e5c', ruim: '#c0392b', neutro: '#14213d', claro: '#9aa7bd', ouro: '#c9a227'};
+  const temChart = typeof Chart !== 'undefined';
+  const graficos = {};
+  let sel = 0;
+  const F0 = () => ({rec: 1, cus: 1, inv: 1, taxa: 0});
+  let F = F0();
+
+  // ---------- matemática financeira (espelha analysis.py) ----------
+  function montar(s, f) {
+    let op;
+    if (s.decomposto) {
+      const R = s.receita * f.rec, C = s.custo_caixa * f.cus;
+      const ebt = R - C - s.depreciacao;
+      const cf = R - C - Math.max(ebt, 0) * s.imposto / 100;
+      op = Array(s.anos).fill(cf);
+    } else {
+      op = s.fluxos_op.map(x => x * f.rec);
+    }
+    const inv = s.investimento * f.inv;
+    const pre = s.cronograma.slice(1).map(x => -inv * x);
+    return {i0: inv * s.cronograma[0], fluxos: pre.concat(op), inv: inv};
+  }
+  function vpl(m, taxaPct, residual) {
+    const i = taxaPct / 100;
+    let v = -m.i0;
+    m.fluxos.forEach((x, k) => { v += x / Math.pow(1 + i, k + 1); });
+    if (residual && m.fluxos.length) v += residual / Math.pow(1 + i, m.fluxos.length);
+    return v;
+  }
+  function tir(m, residual) {
+    if (m.inv <= 0 || !m.fluxos.length) return null;
+    let a = -99, b = 1000, va = vpl(m, a, residual), vb = vpl(m, b, residual);
+    if (va === 0) return a; if (vb === 0) return b;
+    if (va * vb > 0) return null;
+    for (let k = 0; k < 200; k++) {
+      const mid = (a + b) / 2, vm = vpl(m, mid, residual);
+      if (Math.abs(vm) < 1e-4) return mid;
+      if (va * vm < 0) { b = mid; vb = vm; } else { a = mid; va = vm; }
+    }
+    return (a + b) / 2;
+  }
+  function payback(m, taxaPct) {
+    const i = taxaPct / 100;
+    const res = {simples: null, descontado: null};
+    [['simples', 0], ['descontado', i]].forEach(([chave, tx]) => {
+      let saldo = -m.i0;
+      for (let k = 0; k < m.fluxos.length; k++) {
+        const x = m.fluxos[k] / Math.pow(1 + tx, k + 1), ant = saldo;
+        saldo += x;
+        if (saldo >= 0) { res[chave] = x === 0 ? k + 1 : k + (-ant / x); break; }
+      }
+    });
+    return res;
+  }
+  function indicadores(s, f) {
+    const m = montar(s, f), taxa = Math.max(s.taxa + f.taxa, 0);
+    const v = vpl(m, taxa, s.residual), t = tir(m, s.residual), p = payback(m, taxa);
+    return {m, taxa, vpl: v, tir: t, pbs: p.simples, pbd: p.descontado,
+            viavel: m.inv > 0 && v > 0 && t !== null && t > taxa, il: m.inv > 0 ? 1 + v / m.inv : null};
+  }
+  // quanto um fator pode variar (em %) até o VPL zerar
+  function margem(s, chave, sentido) {
+    const base = indicadores(s, F0());
+    if (base.vpl <= 0) return null;
+    const f = () => Object.assign(F0(), {});
+    let lo = 0, hi = sentido < 0 ? 1 : 3, g = x => { const o = f(); o[chave] = 1 + sentido * x; return indicadores(s, o).vpl; };
+    if (g(hi) > 0) return null;
+    for (let k = 0; k < 60; k++) { const mid = (lo + hi) / 2; if (g(mid) > 0) lo = mid; else hi = mid; }
+    return lo * 100;
+  }
+
+  // ---------- gráficos ----------
+  function grafico(id, config) {
+    if (!temChart) return;
+    if (graficos[id]) graficos[id].destroy();
+    graficos[id] = new Chart(document.getElementById(id), config);
+  }
+  const opcoesBase = {responsive: true, maintainAspectRatio: false, plugins: {legend: {labels: {boxWidth: 12}}}};
+  const rotuloY = {ticks: {callback: v => fmt(v)}};
+
+  function desenhar() {
+    const s = D.cenarios[sel], r = indicadores(s, F), b = s.base;
+    const m = r.m;
+
+    // veredito
+    const el = document.getElementById('dash-veredito');
+    const mudou = JSON.stringify(F) !== JSON.stringify(F0());
+    el.className = 'alert mb-3 ' + (r.viavel ? 'alert-success' : 'alert-danger');
+    el.innerHTML = '<strong>' + (r.viavel ? 'Economicamente viável' : 'Não é economicamente viável') + '</strong>'
+      + (mudou ? ' <span class="badge text-bg-secondary ms-1">simulação</span>' : '')
+      + '<div class="small mt-1">' + (r.viavel
+        ? 'O VPL é positivo e a TIR (' + pct(r.tir) + ') supera a taxa mínima exigida (' + fmt(r.taxa, 2) + '%).'
+        : (r.vpl <= 0 ? 'O VPL é ' + (r.vpl === 0 ? 'nulo' : 'negativo') + ': nessa taxa de ' + fmt(r.taxa, 2) + '% o projeto não devolve o investimento.'
+          : 'A TIR não supera a taxa mínima exigida de ' + fmt(r.taxa, 2) + '%.')) + '</div>';
+
+    // indicadores
+    const kp = [
+      ['VPL', fmt(r.vpl), r.vpl > 0 ? 'ok' : 'ruim', 'Valor que o projeto cria (ou destrói) em valores de hoje.'],
+      ['TIR', pct(r.tir), r.tir !== null && r.tir > r.taxa ? 'ok' : 'ruim', 'Exigido: ' + fmt(r.taxa, 2) + '%'],
+      ['Payback descontado', anos(r.pbd), r.pbd !== null ? 'ok' : 'ruim', 'Simples: ' + anos(r.pbs)],
+      ['Índice de lucratividade', r.il === null ? '—' : fmt(r.il, 2), r.il !== null && r.il > 1 ? 'ok' : 'ruim', 'Acima de 1 = cada unidade investida volta com sobra.'],
+    ];
+    document.getElementById('dash-kpis').innerHTML = kp.map(k =>
+      '<div class="col-6 col-lg-3"><div class="feature py-3" style="border-left:4px solid ' + COR[k[2]] + '">'
+      + '<div class="small text-muted text-uppercase fw-bold">' + k[0] + '</div>'
+      + '<div class="h4 mb-1" style="color:' + COR[k[2]] + '">' + k[1] + '</div>'
+      + '<div class="small text-muted">' + k[3] + '</div></div></div>').join('');
+
+    // acumulado
+    const rot = ['Ano 0'], nom = [-m.i0], desc = [-m.i0], i = r.taxa / 100;
+    let a = -m.i0, d = -m.i0;
+    m.fluxos.forEach((x, k) => {
+      a += x; d += x / Math.pow(1 + i, k + 1);
+      rot.push('Ano ' + (k + 1)); nom.push(a); desc.push(d);
+    });
+    const anual = [-m.i0].concat(m.fluxos);
+    grafico('ch-acum', {type: 'line', data: {labels: rot, datasets: [
+      {label: 'Acumulado', data: nom, borderColor: COR.neutro, backgroundColor: COR.neutro, tension: .15},
+      {label: 'Acumulado descontado', data: desc, borderColor: COR.ok, backgroundColor: COR.ok, tension: .15}]},
+      options: Object.assign({}, opcoesBase, {scales: {y: rotuloY}})});
+    grafico('ch-anual', {type: 'bar', data: {labels: rot, datasets: [{label: 'Fluxo do ano', data: anual,
+      backgroundColor: anual.map(x => x >= 0 ? COR.ok : COR.ruim)}]},
+      options: Object.assign({}, opcoesBase, {plugins: {legend: {display: false}}, scales: {y: rotuloY}})});
+
+    // curva VPL x taxa
+    const teto = Math.max(60, r.tir !== null ? Math.ceil(r.tir * 1.4 / 10) * 10 : 60, r.taxa * 1.5), pts = [];
+    for (let t = 0; t <= teto; t += teto / 40) pts.push({x: +t.toFixed(2), y: vpl(m, t, s.residual)});
+    const marcas = [{x: r.taxa, y: r.vpl}];
+    const dsCurva = [
+      {label: 'VPL', data: pts, borderColor: COR.neutro, backgroundColor: COR.neutro, pointRadius: 0, tension: .2, showLine: true},
+      {label: 'Taxa mínima exigida (' + fmt(r.taxa, 1) + '%)', data: marcas, borderColor: COR.ouro, backgroundColor: COR.ouro, pointRadius: 7, showLine: false}];
+    if (r.tir !== null && r.tir > 0) dsCurva.push({label: 'TIR (' + fmt(r.tir, 1) + '%)', data: [{x: r.tir, y: 0}], borderColor: COR.ok, backgroundColor: COR.ok, pointRadius: 7, showLine: false});
+    grafico('ch-curva', {type: 'scatter', data: {datasets: dsCurva}, options: Object.assign({}, opcoesBase, {
+      scales: {y: rotuloY, x: {title: {display: true, text: 'Taxa de desconto (%)'}}}})});
+
+    // tornado
+    const v = +document.getElementById('dash-var').value / 100;
+    const itens = [['Investimento', 'inv'], [s.decomposto ? 'Receita' : 'Fluxo líquido anual', 'rec']];
+    if (s.decomposto) itens.push(['Custos operacionais', 'cus']);
+    const medir = (chave, fator) => { const o = Object.assign({}, F); o[chave] = F[chave] * fator; return indicadores(s, o).vpl - r.vpl; };
+    const linhas = itens.map(([n, c]) => ({n, menos: medir(c, 1 - v), mais: medir(c, 1 + v)}));
+    const dt = Math.max(s.taxa * v, 0.1), ot = x => indicadores(s, Object.assign({}, F, {taxa: F.taxa + x})).vpl - r.vpl;
+    linhas.push({n: 'Taxa de desconto', menos: ot(-dt), mais: ot(dt)});
+    linhas.sort((x, y) => Math.max(Math.abs(y.menos), Math.abs(y.mais)) - Math.max(Math.abs(x.menos), Math.abs(x.mais)));
+    grafico('ch-torn', {type: 'bar', data: {labels: linhas.map(l => l.n), datasets: [
+      {label: 'Se diminuir ' + fmt(v * 100) + '%', data: linhas.map(l => l.menos), backgroundColor: COR.claro},
+      {label: 'Se aumentar ' + fmt(v * 100) + '%', data: linhas.map(l => l.mais), backgroundColor: COR.neutro}]},
+      options: Object.assign({}, opcoesBase, {indexAxis: 'y', scales: {x: {ticks: {callback: z => fmt(z)}, title: {display: true, text: 'Variação do VPL'}}}})});
+
+    // custos
+    const col = document.getElementById('dash-custos-col');
+    col.hidden = !s.custos.length;
+    if (s.custos.length) {
+      const pal = ['#0f6e5c', '#14213d', '#c9a227', '#18a385', '#4a5672', '#9fe3cf', '#c0392b', '#8e9bb5'];
+      grafico('ch-custos', {type: 'doughnut', data: {labels: s.custos.map(c => c.nome),
+        datasets: [{data: s.custos.map(c => c.valor * (c.nome.indexOf('Depreciação') === 0 ? 1 : F.cus)), backgroundColor: pal}]},
+        options: Object.assign({}, opcoesBase, {plugins: {legend: {position: 'right', labels: {boxWidth: 12}},
+          tooltip: {callbacks: {label: c => c.label + ': ' + fmt(c.parsed)}}}})});
+    }
+
+    // margens (sempre sobre os dados originais)
+    const mg = [];
+    if (s.decomposto) { mg.push(['A receita pode cair até', margem(s, 'rec', -1), -1]); mg.push(['Os custos operacionais podem subir até', margem(s, 'cus', 1), 1]); }
+    else mg.push(['O fluxo líquido anual pode cair até', margem(s, 'rec', -1), -1]);
+    mg.push(['O investimento pode subir até', margem(s, 'inv', 1), 1]);
+    document.getElementById('dash-margens').innerHTML = b.vpl <= 0
+      ? '<div class="alert alert-warning small mb-0">Com os dados originais o VPL já é negativo, então não há margem de segurança. Use o simulador para ver o que precisaria mudar (por exemplo, quanto a receita teria de subir).</div>'
+      : mg.map(([t, x, sent]) => '<div class="d-flex justify-content-between border-bottom py-2"><span>' + t + '</span><strong>'
+        + (x === null ? (sent < 0 ? 'mesmo zerado, o VPL segue positivo' : 'mais de 300%') : fmt(x, 1) + '%') + '</strong></div>').join('')
+        + '<div class="small text-muted mt-2">Quanto menor o número, mais sensível o projeto é àquele fator.</div>';
+  }
+
+  // ---------- controles ----------
+  function sliders() {
+    const s = D.cenarios[sel];
+    const defs = [];
+    defs.push([s.decomposto ? 'Receita anual' : 'Fluxo líquido anual', 'rec', -50, 50, 1, v => (v >= 0 ? '+' : '') + v + '%']);
+    if (s.decomposto) defs.push(['Custos operacionais', 'cus', -50, 50, 1, v => (v >= 0 ? '+' : '') + v + '%']);
+    defs.push(['Investimento', 'inv', -50, 50, 1, v => (v >= 0 ? '+' : '') + v + '%']);
+    defs.push(['Taxa de desconto (pontos percentuais)', 'taxa', -10, 10, 0.5, v => (v >= 0 ? '+' : '') + v + ' p.p.']);
+    document.getElementById('dash-sliders').innerHTML = defs.map(([n, c, mn, mx, st, f], k) =>
+      '<div class="col-md-6 col-lg-3"><label class="form-label d-flex justify-content-between mb-1"><span>' + n
+      + '</span><span class="text-muted" id="sv-' + c + '">' + f(0) + '</span></label>'
+      + '<input type="range" class="form-range" min="' + mn + '" max="' + mx + '" step="' + st + '" value="0" data-chave="' + c + '"></div>').join('');
+    document.querySelectorAll('#dash-sliders input').forEach(inp => inp.addEventListener('input', () => {
+      const c = inp.dataset.chave, val = +inp.value, def = defs.find(d => d[1] === c);
+      F[c] = c === 'taxa' ? val : 1 + val / 100;
+      document.getElementById('sv-' + c).textContent = def[5](val);
+      desenhar();
+    }));
+    document.getElementById('dash-simnota').textContent = s.decomposto ? ''
+      : 'Este cenário veio de um fluxo de caixa já pronto, por isso receita e custos não podem ser simulados separadamente.';
+  }
+  function abas() {
+    const ul = document.getElementById('dash-abas');
+    ul.hidden = D.cenarios.length < 2;
+    ul.innerHTML = D.cenarios.map((c, k) => '<li class="nav-item"><button type="button" class="nav-link ' + (k === sel ? 'active' : '')
+      + '" data-k="' + k + '">' + c.nome + '</button></li>').join('');
+    ul.querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => {
+      sel = +bt.dataset.k; F = F0(); abas(); sliders(); desenhar();
+    }));
+  }
+  document.getElementById('dash-reset').addEventListener('click', () => { F = F0(); sliders(); desenhar(); });
+  document.getElementById('dash-var').addEventListener('change', desenhar);
+
+  if (D.cenarios.length > 1) {
+    document.getElementById('dash-comparar').hidden = false;
+    grafico('ch-comp', {type: 'bar', data: {labels: D.cenarios.map(c => c.nome), datasets: [{label: 'VPL',
+      data: D.cenarios.map(c => c.base.vpl), backgroundColor: D.cenarios.map(c => c.base.viavel ? COR.ok : COR.ruim)}]},
+      options: Object.assign({}, opcoesBase, {plugins: {legend: {display: false}}, scales: {y: rotuloY}})});
+  }
+  if (!temChart) document.getElementById('dash').insertAdjacentHTML('afterbegin',
+    '<div class="alert alert-warning m-3">Os gráficos não carregaram (sem acesso à biblioteca Chart.js). Os indicadores e o simulador continuam funcionando.</div>');
+  abas(); sliders(); desenhar();
+})();
+</script>

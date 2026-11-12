@@ -1,6 +1,7 @@
 """Cálculo genérico de viabilidade econômica por cenário."""
 
-from analysis import analisar_viabilidade_investimento, numero, valor_presente_liquido
+from analysis import (analisar_viabilidade_investimento, numero, valor_presente_liquido,
+                      aplicar_cronograma_investimento)
 
 
 def _normalizar_itens(items, rotulo):
@@ -14,6 +15,8 @@ def _normalizar_itens(items, rotulo):
             "quantidade": quantidade,
             "valor_unitario": unitario,
             "valor": valor,
+            "vida_util": numero(item.get("vida_util")),
+            "formula": item.get("formula", ""),
         })
     return normalizados
 
@@ -52,13 +55,21 @@ def analisar_projeto(globais, cenarios):
                 "vida_util": vida,
                 "depreciacao_anual": base / vida if base > 0 and vida > 0 else 0,
             })
+        for item in investimentos:
+            if item["vida_util"] > 0 and item["valor"] > 0:
+                ativos.append({
+                    "nome": item["nome"],
+                    "base": item["valor"],
+                    "vida_util": item["vida_util"],
+                    "depreciacao_anual": item["valor"] / item["vida_util"],
+                })
         depreciacao = sum(a["depreciacao_anual"] for a in ativos)
         fluxos = c.get("fluxos_caixa")
         lucro_antes_imposto = total_beneficios - total_custos - depreciacao
         imposto_anual = max(lucro_antes_imposto, 0) * imposto / 100
         if fluxos is None:
             fluxo_anual = lucro_antes_imposto - imposto_anual + depreciacao
-            fluxos = [fluxo_anual] * anos
+            fluxos = [fluxo_anual] * max(0, int(c.get("anos") or anos))
         else:
             fluxos = [numero(x) for x in fluxos]
             # Um cronograma direto já deve conter os fluxos líquidos após impostos.
@@ -68,12 +79,18 @@ def analisar_projeto(globais, cenarios):
         investimento_itens = _items_total(investimentos)
         investimento = investimento_itens if investimento_itens > 0 else numero(c.get("investimento_inicial"))
         residual = numero(c.get("valor_residual"))
+        cronograma = c.get("cronograma_investimento")
         viabilidade = analisar_viabilidade_investimento(
             investimento_inicial=investimento,
             fluxos_caixa=fluxos,
             taxa=taxa,
             valor_residual=residual,
+            cronograma_investimento=cronograma,
         )
+        inv_ano0, fluxos_totais, _ = aplicar_cronograma_investimento(investimento, fluxos, cronograma)
+        linha_do_tempo = [{"ano": 0, "valor": -inv_ano0}] + [
+            {"ano": t, "valor": v} for t, v in enumerate(fluxos_totais, start=1)
+        ]
         resultados.append({
             "nome": (c.get("nome") or "").strip() or f"Cenário {i}",
             "investimento_inicial": investimento,
@@ -90,12 +107,15 @@ def analisar_projeto(globais, cenarios):
             "fluxo_anual": fluxo_anual,
             "ativos_depreciaveis": ativos,
             "fluxos_caixa": fluxos,
+            "fluxos_totais": fluxos_totais,
+            "linha_do_tempo": linha_do_tempo,
+            "cronograma_investimento": cronograma,
+            "custos_incluem_depreciacao": bool(c.get("custos_incluem_depreciacao")),
+            "imposto_pct": imposto,
             "fluxo_direto": c.get("fluxos_caixa") is not None,
             "anos": len(fluxos),
             "viabilidade": viabilidade,
-            "vpl_wacc": valor_presente_liquido(
-                investimento, fluxos, wacc, residual
-            ),
+            "vpl_wacc": valor_presente_liquido(inv_ano0, fluxos_totais, wacc, residual),
             "avisos": list(c.get("avisos", [])),
         })
         if c.get("fluxos_caixa") is None and imposto <= 0:
@@ -104,7 +124,7 @@ def analisar_projeto(globais, cenarios):
             resultados[-1]["avisos"].append("Nenhum ativo depreciável foi informado; o imposto foi estimado sem dedução de depreciação.")
 
     melhor = max(resultados, key=lambda x: x["viabilidade"]["vpl"])["nome"] if len(resultados) > 1 else None
-    return {"taxa_desconto": taxa, "cenarios": resultados, "melhor": melhor}
+    return {"taxa_desconto": taxa, "taxa_imposto": imposto, "cenarios": resultados, "melhor": melhor}
 
 
 def converter_resultado_tea(resultado_tea):
@@ -116,14 +136,19 @@ def converter_resultado_tea(resultado_tea):
             "investimento_inicial": c["investimento_inicial"],
             "valor_residual": c["valor_residual"],
             "beneficios": [{"nome": "Receita anual", "valor": c["receita"]}],
-            "custos": [{"nome": x["nome"], "valor": x["valor"]} for x in c["custos"]],
-            "fluxos_caixa": [c["fluxo_caixa_anual"]] * c["anos"],
+            "custos": [{"nome": x["nome"], "valor": x["valor"], "formula": x.get("formula", "")}
+                       for x in c["custos"]],
+            "fluxos_caixa": c.get("fluxos_operacionais") or [c["fluxo_caixa_anual"]] * c["anos"],
+            "cronograma_investimento": c.get("cronograma_investimento"),
+            "custos_incluem_depreciacao": True,
             "avisos": c["avisos"],
         })
     result = analisar_projeto(
-        {"taxa_desconto": resultado_tea["cenarios"][0]["viabilidade"]["taxa_desconto"] if cenarios else 0},
+        {"taxa_desconto": resultado_tea["cenarios"][0]["viabilidade"]["taxa_desconto"] if cenarios else 0,
+         "taxa_imposto": resultado_tea.get("taxa_imposto", 0)},
         cenarios,
     )
+    result["taxa_imposto"] = resultado_tea.get("taxa_imposto", 0)
     for target, source in zip(result["cenarios"], resultado_tea["cenarios"]):
         target["viabilidade"] = source["viabilidade"]
         target["vpl_wacc"] = source["vpl_wacc"]

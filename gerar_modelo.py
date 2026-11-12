@@ -37,7 +37,10 @@ linhas = [
     "• Aba Equipamentos: uma linha por equipamento; a coluna 'cenario' deve repetir exatamente o nome do cenário.",
     "• Não altere os nomes das abas nem a coluna 'chave' (o site usa essas chaves para ler os valores).",
     "• Os valores vêm de Teste.xlsx e servem de exemplo: substitua pelos seus.",
-    "• FCI, investimento inicial total (TCI) e edificações (aba Cenarios) são opcionais no modelo. Sem FCI, o site usa o custo de equipamentos como base de custos/depreciação; sem TCI, usa o FCI como investimento inicial e avisa que capital de giro/partida podem estar fora do VPL.",
+    "• OBRIGATÓRIO preencher: taxa mínima de atratividade (MARR) e vida útil do projeto (aba Globais); em cada cenário, a matéria-prima processada e os equipamentos com quantidade e custo. O restante já vem preenchido com valores-padrão ou é opcional.",
+    "• FCI, investimento total (TCI) e edificações (aba Cenarios) são opcionais. Em branco, o site estima o investimento pelos fatores do grupo 'Fatores de investimento' (aba Globais), como a aba Capital Investment do Excel EVTE: instalação, tubulação, edificações, engenharia, contingência, capital de giro e partida. Se esses fatores também forem apagados, o site usa só o custo dos equipamentos e avisa que o investimento deve estar subestimado.",
+    "• 'Parcela do investimento paga no ano 0' (aba Globais) permite dividir o desembolso (ex.: 70% no ano 0 e 30% no ano 1, antes da operação). Em branco = 100% no ano 0.",
+    "• Para projetos que não são de processo industrial (sem equipamentos/insumos), use o modelo 'modelo_planilha_generico.xlsx'.",
 ]
 for i, t in enumerate(linhas, start=1):
     c = ws.cell(row=i, column=1, value=t)

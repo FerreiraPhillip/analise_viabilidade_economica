@@ -18,7 +18,24 @@
   <div class="mb-3">
     <input class="form-control" type="file" name="planilha" accept=".xlsx">
   </div>
+  <details class="mb-3">
+    <summary class="fw-semibold" style="cursor:pointer">Opções para a planilha EVTE</summary>
+    <div class="mt-2 small">
+      <p class="mb-2 text-muted">A planilha EVTE traz valores digitados na tabela de premissas que não são os usados nas suas fórmulas (ex.: mão de obra a US$ 25/h na tabela e US$ 10/h na conta). Escolha qual considerar — o resultado mostra a comparação dos dois de qualquer forma.</p>
+      <div class="form-check"><input class="form-check-input" type="radio" name="modo_evte" id="m1" value="formulas" checked>
+        <label class="form-check-label" for="m1">Reproduzir o que as fórmulas da planilha aplicam (bate com o VPL/TIR do Excel)</label></div>
+      <div class="form-check"><input class="form-check-input" type="radio" name="modo_evte" id="m2" value="premissas">
+        <label class="form-check-label" for="m2">Usar a tabela de premissas ao pé da letra</label></div>
+    </div>
+  </details>
   <button type="submit" class="btn btn-primary btn-lg">Enviar e calcular</button>
 </form>
+</div></div>
+
+<div class="card mt-3"><div class="card-body small">
+  <strong>Não sabe como preencher?</strong> Baixe um modelo:
+  <a href="{{ url_for('static', filename='modelo_planilha_generico.xlsx') }}">projeto geral (investimento, receitas, custos)</a> ·
+  <a href="{{ url_for('static', filename='modelo_planilha.xlsx') }}">processo industrial (equipamentos, insumos, critérios de custo)</a>.
+  Em ambos, as células amarelas são as que você preenche; o que está na aba “Calculado_pelo_site” ou “Leia-me” é calculado automaticamente.
 </div></div>
 {% endblock %}

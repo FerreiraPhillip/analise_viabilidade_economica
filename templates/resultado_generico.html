@@ -24,6 +24,48 @@
 <div class="alert alert-warning"><strong>{{ c.nome }} — atenção:</strong><ul class="mb-0">{% for aviso in c.avisos %}<li>{{ aviso }}</li>{% endfor %}</ul></div>
 {% endfor %}
 
+{% include 'dashboard.html' %}
+
+{% if r.conferencia %}
+<div class="card mb-4 border-warning">
+  <div class="card-header">Conferência com a planilha original</div>
+  <div class="card-body">
+    <p class="small mb-2">
+      {% if r.conferencia.modo == 'formulas' %}
+        O resultado acima usa <strong>o que as fórmulas da planilha realmente aplicam</strong>, por isso deve bater com o VPL e a TIR do Excel.
+      {% else %}
+        O resultado acima usa <strong>a tabela de premissas ao pé da letra</strong>, por isso pode diferir do Excel.
+      {% endif %}
+      A planilha tem valores digitados na tabela de premissas que não são os mesmos usados nas fórmulas (lista abaixo). Confira qual dos dois você quer assumir — isso pode mudar o veredito.
+    </p>
+    <div class="table-responsive"><table class="table table-sm align-middle">
+      <thead class="table-light"><tr><th>Cenário</th><th class="text-end">VPL no Excel</th><th class="text-end">TIR no Excel</th><th class="text-end">VPL no site (acima)</th><th class="text-end">TIR no site</th><th class="text-end">VPL {{ 'pela tabela de premissas' if r.conferencia.modo == 'formulas' else 'pelas fórmulas' }}</th><th>Veredito {{ 'pela tabela' if r.conferencia.modo == 'formulas' else 'pelas fórmulas' }}</th></tr></thead>
+      <tbody>
+      {% for l in r.conferencia.linhas %}
+        <tr><td>{{ l.nome }}</td>
+          <td class="text-end">{{ l.excel_vpl|num(2) }}</td>
+          <td class="text-end">{{ ((l.excel_tir * 100)|num(2) ~ '%') if l.excel_tir is not none else '—' }}</td>
+          <td class="text-end">{{ l.site_vpl|num(2) }}</td>
+          <td class="text-end">{{ (l.site_tir|num(2) ~ '%') if l.site_tir is not none else 'não calculável' }}</td>
+          <td class="text-end">{{ l.alt_vpl|num(2) }}</td>
+          <td>{{ 'viável' if l.alt_viavel else 'não viável' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% if r.conferencia.divergencias %}
+    <h2 class="h6 mt-3">Valores que divergem dentro da própria planilha</h2>
+    <div class="table-responsive"><table class="table table-sm">
+      <thead class="table-light"><tr><th>Item</th><th class="text-end">Tabela de premissas</th><th class="text-end">Aplicado nas fórmulas</th><th>Unidade</th></tr></thead>
+      <tbody>{% for d in r.conferencia.divergencias %}
+        <tr><td>{{ d.parametro }}</td><td class="text-end">{{ d.premissa|num(2) }}</td><td class="text-end">{{ d.aplicado|num(2) }}</td><td class="small text-muted">{{ d.unidade }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    <p class="small text-muted mb-0">O payback do Excel divide o fluxo acumulado descontado por um fluxo não descontado, por isso o do site (descontado exato) pode ser diferente.</p>
+  </div>
+</div>
+{% endif %}
+
 <div class="card mb-4">
   <div class="card-header">Comparação dos indicadores</div>
   <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
@@ -52,11 +94,11 @@
   <div class="card-body">
     <h2 class="h6">Fluxo de caixa por ano</h2>
     <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Ano</th><th class="text-end">Fluxo líquido</th></tr></thead><tbody>
-      {% for valor in c.fluxos_caixa %}<tr><td>{{ loop.index }}</td><td class="text-end">{{ valor|num(2) }}</td></tr>{% endfor %}
+      {% for p in c.linha_do_tempo %}<tr><td>{{ p.ano }}</td><td class="text-end">{{ p.valor|num(2) }}</td></tr>{% endfor %}
     </tbody></table></div>
     {% if c.beneficios %}<h2 class="h6 mt-4">Receitas e benefícios anuais</h2><ul>{% for item in c.beneficios %}<li>{{ item.nome }}: {% if item.valor_unitario %}{{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {% endif %}{{ item.valor|num(2) }}</li>{% endfor %}</ul>{% endif %}
-    {% if c.custos %}<h2 class="h6 mt-4">Custos e despesas anuais</h2><ul>{% for item in c.custos %}<li>{{ item.nome }}: {% if item.valor_unitario %}{{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {% endif %}{{ item.valor|num(2) }}</li>{% endfor %}</ul>{% endif %}
-    {% if c.investimentos %}<h2 class="h6 mt-4">Itens do investimento inicial</h2><ul>{% for item in c.investimentos %}<li>{{ item.nome }}: {{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {{ item.valor|num(2) }}</li>{% endfor %}</ul>{% endif %}
+    {% if c.custos %}<h2 class="h6 mt-4">Custos e despesas anuais</h2><ul>{% for item in c.custos %}<li>{{ item.nome }}: {% if item.valor_unitario %}{{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {% endif %}{{ item.valor|num(2) }}{% if item.formula %} <span class="small text-muted">— {{ item.formula }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% if c.investimentos %}<h2 class="h6 mt-4">Itens do investimento inicial</h2><ul>{% for item in c.investimentos %}<li>{{ item.nome }}: {{ item.quantidade|num(2) }} × {{ item.valor_unitario|num(2) }} = {{ item.valor|num(2) }}{% if item.vida_util %} <span class="small text-muted">— depreciado em {{ item.vida_util|num(0) }} anos</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
     {% if c.ativos_depreciaveis %}<h2 class="h6 mt-4">Depreciação linear anual</h2><ul>{% for ativo in c.ativos_depreciaveis %}<li>{{ ativo.nome }}: {{ ativo.base|num(2) }} ÷ {{ ativo.vida_util|num(0) }} anos = {{ ativo.depreciacao_anual|num(2) }} por ano</li>{% endfor %}</ul>{% endif %}
   </div>
 </details>
